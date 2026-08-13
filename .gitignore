@@ -1,0 +1,33 @@
+# PHP / Composer
+# vendor/ is intentionally NOT ignored — it is bundled in the repo so the app
+# runs without Composer (see README). composer.lock pins the exact versions.
+
+# database
+*.db
+*.db-shm
+*.db-wal
+
+# user uploads
+uploads
+
+# media signing secret
+.media-secret
+
+# dotenv environment variable files
+.env
+.env.local
+
+# caches
+cache
+
+# opencode agent tooling — never pushed
+.opencode/
+
+# node (opencode plugin tooling)
+node_modules
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
