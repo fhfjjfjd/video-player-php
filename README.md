@@ -185,3 +185,14 @@ registration is pending.
 - `scripts/start.sh` / `scripts/start.cmd` — start the app via `php -S`
 - `CHANGELOG.md` / `CHANGELOG.vi.md` — release history (Keep a Changelog format)
 - `vendor/` — bundled PHP dependencies (Symfony + PHPMailer), no Composer needed
+
+## AI agent support
+
+The repo ships rules for AI coding assistants, all backed by a single source of
+truth:
+
+- `AGENTS.md` — the project's rules (20-phase release workflow, PHP coding
+  standards, security baseline, docs + changelog sync). Read directly by Cline
+  CLI, Codex CLI and OpenCode.
+- `CLAUDE.md` — imports `AGENTS.md` (`@AGENTS.md`) so Claude Code follows the
+  same rules without duplicating them.

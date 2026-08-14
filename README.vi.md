@@ -160,3 +160,14 @@ chờ xác thực.
 - `scripts/start.sh` / `scripts/start.cmd` — khởi động ứng dụng qua `php -S`
 - `CHANGELOG.md` / `CHANGELOG.vi.md` — lịch sử phát hành (định dạng Keep a Changelog)
 - `vendor/` — dependencies PHP được bundle sẵn (Symfony + PHPMailer), không cần Composer
+
+## Hỗ trợ tác nhân AI
+
+Kho chứa đi kèm quy tắc dành cho các trợ lý lập trình AI, tất cả dựa trên một
+nguồn duy nhất:
+
+- `AGENTS.md` — quy tắc của dự án (quy trình phát hành 20 giai đoạn, tiêu chuẩn
+  mã PHP, đường cơ sở bảo mật, đồng bộ tài liệu + changelog). Được Cline CLI,
+  Codex CLI và OpenCode đọc trực tiếp.
+- `CLAUDE.md` — import `AGENTS.md` (`@AGENTS.md`) để Claude Code tuân theo cùng
+  bộ quy tắc mà không phải trùng lặp.

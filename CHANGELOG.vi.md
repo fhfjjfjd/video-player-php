@@ -6,6 +6,11 @@ phát hành được định nghĩa trong `AGENTS.md`.
 
 ## [Chưa phát hành]
 
+### Thêm mới
+
+- Hỗ trợ tác nhân AI: `CLAUDE.md` import `AGENTS.md` cho Claude Code; Cline CLI,
+  Codex CLI và OpenCode đọc thẳng `AGENTS.md` (một nguồn quy tắc duy nhất).
+
 ## [1.1.2] - 2026-08-14
 
 ### Thay đổi

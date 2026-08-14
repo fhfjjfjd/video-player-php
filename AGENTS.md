@@ -1235,3 +1235,8 @@ context and every rule must be accurate.
 15.5. **Contradictions are fatal.** If two rules conflict, the stricter one
       wins and the conflict MUST be resolved in the same commit; never leave
       the file self-contradicting.
+15.6. **Keep the agent rule files in sync.** `AGENTS.md` is read directly by
+      Cline CLI, Codex CLI and OpenCode; `CLAUDE.md` (Claude Code) imports
+      `AGENTS.md` via `@AGENTS.md` so all four tools share one source of
+      truth. Never duplicate rules into `CLAUDE.md`; Claude-specific
+      instructions go below the import there, never in `AGENTS.md`.

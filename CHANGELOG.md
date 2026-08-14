@@ -6,6 +6,11 @@ release workflow is defined in `AGENTS.md`.
 
 ## [Unreleased]
 
+### Added
+
+- AI agent support: `CLAUDE.md` imports `AGENTS.md` for Claude Code; Cline CLI,
+  Codex CLI and OpenCode read `AGENTS.md` directly (single source of truth).
+
 ## [1.1.2] - 2026-08-14
 
 ### Changed
