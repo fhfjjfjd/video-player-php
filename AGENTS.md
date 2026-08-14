@@ -13,7 +13,12 @@ migrations when the schema changes, (3) running a security and error-control
 review, (4) updating the documentation AND the changelog, (5) getting an
 independent code review for non-trivial changes, (6) committing, (7) pushing,
 (8) bumping the version, (9) tagging, (10) creating a PREVIEW (unstable)
-release for users to test, and (11) promoting it to stable after confirmation.
+release for users to test, (11) promoting it to stable after confirmation, and
+then (12)–(20) stewarding the shipped version: monitoring its health,
+collecting feedback, checking performance, reviewing accessibility and
+localization, verifying rollback readiness, refreshing security and dependency
+advisories, running a blameless postmortem, reporting DORA metrics, and
+triaging feedback back into Phase 0.
 There is NO GitHub Actions trigger, NO artifact download/verification, and NO
 binary upload. A release is created from docs and version changes only and
 does not attach binaries. If the backend runtime is missing on this machine,
@@ -73,13 +78,23 @@ subagent", follow the instructions in **Section 4** first.
 
 ## 2. The release workflow
 
-The workflow has **11 phases**. Phase 0–1 analyze the change, Phase 2 runs the
+The workflow has **20 phases**. Phase 0–1 analyze the change, Phase 2 runs the
 local checks (syntax, tests, migrations), Phase 3 is the security and
 error-control review, Phase 4 syncs the docs and the changelog, Phase 5 bumps
 the version, Phases 6–8 commit/push/tag, Phase 9 creates the PREVIEW (unstable)
 release and promotes it to stable, and Phase 10 closes out. Every phase must
 complete before the next one starts. If any phase fails, do not proceed; fix
 and retry.
+
+Phases 11–19 are the **post-release stewardship** loop. They run on the shipped
+version — a bounded watch window, then on a calendar cadence — and close the
+cycle: Phase 11 monitors the release's health, Phase 12 collects user feedback,
+Phase 13 checks performance regression, Phase 14 audits accessibility and
+localization, Phase 15 verifies rollback readiness, Phase 16 refreshes security
+and dependency advisories, Phase 17 runs a blameless postmortem when needed,
+Phase 18 reports DORA metrics, and Phase 19 triages all feedback back into
+Phase 0. They are time-based, not build-based: start them after Phase 10 and
+complete them on their own deadlines.
 
 > **No GitHub Actions, no binary uploads.** This workflow never triggers a CI
 > workflow, downloads artifacts, or attaches binaries to a release. The only
@@ -125,9 +140,9 @@ and retry.
      exact rules). Do not edit `composer.json` yet — first confirm the current
      version and the latest tag are consistent (Phase 0.3).
 
-1.4. **Create a todo list** of the remaining phases (2 → 10) and mark Phase 2
-     as in-progress. Track every phase in the todo list; never silently skip
-     one.
+1.4. **Create a todo list** of the remaining phases (2 → 10, plus the
+     post-release stewardship phases 11 → 19) and mark Phase 2 as in-progress.
+     Track every phase in the todo list; never silently skip one.
 
 ### Phase 2 — Compilation check, tests, and migration check (conditional)
 
@@ -344,7 +359,230 @@ and retry.
 10.3. **Report to the user.** Give a concise summary: what changed, whether
       the backend was verified locally (syntax check / tests) or skipped
       because no compiler exists, the new version, the tag, the preview URL,
-      and the stable release URL.
+      and the stable release URL. Then hand off to the post-release
+      stewardship phases (11 → 19).
+
+### Phase 11 — Release health monitoring (stability watch window)
+
+Purpose: observe the shipped version for a bounded window and decide — from
+logs, not vibes — whether to promote the preview or cut a patch.
+
+11.1. **Set the error budget and the revert trigger BEFORE shipping.** Over a
+      24-hour window, treat any of these as a significant event (promote only
+      after it is explained or fixed): ≥3 distinct 500 responses, any
+      `PHP Fatal error` / `Uncaught` exception, any `SQLSTATE[HY000]` SQLite
+      error (e.g. `database is locked`), or a cluster of HTTP 429s on one
+      rate-limit bucket.
+11.2. **Scan the error log.** `src/bootstrap.php` keeps `log_errors=1` /
+      `display_errors=0`; locate the configured `error_log` path (default SAPI
+      log). Compare the window since the release tag against the same-length
+      window right before it, so pre-existing noise is not blamed on the
+      release:
+      ```bash
+      grep -c 'PHP Fatal error' <error_log>
+      grep -n 'PHP Fatal error\|Uncaught\|Stack trace' <error_log> | tail -n 20
+      grep -c 'SQLSTATE\[HY000\]' <error_log>
+      ```
+11.3. **Watch for slow or hung requests.** A `Maximum execution time ...
+      exceeded` line IS a slow response; a `database is locked` spike signals
+      writer contention under the `PHP_WORKERS` multi-worker server.
+11.4. **Time-box the decision.** At 24 h and again at 72 h after the tag, run
+      the checks above, record the counts, and either promote the preview
+      (Phase 9.4) or cut a patch (Phase 9.3). A window that never ends is not
+      a policy.
+
+### Phase 12 — User acceptance testing and feedback collection
+
+Purpose: get real user signal on the preview build, then turn it into a short
+go/no-go for promotion.
+
+12.1. **Broadcast the preview URL** (Phase 9.2) and seed a handful of testers
+      (~10 "lighthouse users") who each cover register → verify → login →
+      upload → watch → delete, on BOTH the rendered forms and the JSON API.
+12.2. **Reuse the "Góp ý" button** (it links to GitHub Issues, Section 5).
+      Ask testers to report with a short template: category (bug / i18n /
+      a11y / perf / feature), browser, and locale (VI or EN).
+12.3. **Keep any exit survey short** (5–7 questions) and run it after the
+      first upload and before the release closes — not at the end of a long
+      session.
+12.4. **Triage weekly and close the loop.** Cluster open-text feedback by
+      theme, label the issues, and tell testers what changed. Testers who hear
+      back respond more next time.
+12.5. **Gate the promotion.** Before Phase 9.4: zero unaddressed critical /
+      serious bugs, and every new user-facing string present in BOTH the VI
+      and EN locale sets.
+
+### Phase 13 — Performance regression check
+
+Purpose: prove the candidate is no slower than a recorded baseline under a
+stable, representative workload.
+
+13.1. **Define the fixed benchmark suite and record a baseline.** Benchmark the
+      load-bearing endpoints: the gzip HTML home page (`/`), the JSON list API
+      (`/api/videos`), and one Range-requested HLS chunk. Use `hey` or `wrk`
+      (`ab` under-reports on fast PHP servers) and store the baseline
+      versioned, e.g. `perf/baseline-*.json`.
+13.2. **Run before/after under identical conditions.** Same machine, one
+      warm-up request, same concurrency (e.g. `-c 20`), same `PHP_WORKERS`.
+      Run each twice and keep the better p99.
+13.3. **Diff p95/p99 first, then error rate, then throughput.** Gate: p95 not
+      worse than baseline by more than 15%, p99 under an absolute ceiling,
+      errors under 0.5%. Report exactly what regressed and by how much.
+13.4. **Verify the load-bearing invariants explicitly.** Text responses stay
+      gzip-compressed with `Vary: Accept-Encoding` (`curl -H "Accept-Encoding:
+      gzip" ... -w "%{size_download}"`); media stays uncompressed and serves
+      Range requests (`curl -H "Range: bytes=0-255" ...` must return `206` /
+      256 bytes).
+13.5. **Re-baseline after major releases; keep the gate cheap.** For patch
+      releases, diff against the last known-good baseline instead of
+      re-baselining.
+
+### Phase 14 — Accessibility and localization review
+
+Purpose: run the W3C quick-win checks plus an automated WCAG scan on the core
+journeys, and verify the VI/EN pairing is complete and correct.
+
+14.1. **Run the W3C "Easy Checks" on every page**, in both languages: page
+      `<title>`, `alt` text, heading structure, color contrast ≥ 4.5:1, 200%
+      zoom without overlap, keyboard access + visible focus, and labels/errors
+      on the login, register and upload forms.
+14.2. **Gate the core journeys with axe-core** (WCAG A/AA), failing only on
+      `critical` / `serious` impacts (keyboard traps, missing accessible
+      names, unlabeled controls). Carry only those into a hard gate or it will
+      be disabled. Automated tools find ~35–57% of issues; keep the manual
+      checks.
+14.3. **Verify the `<html lang>` attribute switches with the language
+      toggle** (`vi` ↔ `en`) and matches the served locale — screen readers
+      announce the language first.
+14.4. **Diff the VI/EN string sets for parity.** Every user-facing string —
+      forms, validation errors, JSON API error messages, player controls —
+      must exist in both locales with no fall-through. Fail if a key exists in
+      one set and not the other; spot-check interpolated strings (translate
+      whole sentences, never assemble), date/number formats, diacritics, and
+      text-overflow in buttons.
+14.5. **Smoke-test both locales end-to-end** (register → upload → watch) and
+      confirm no hardcoded English leaked into the Vietnamese UI.
+
+### Phase 15 — Rollback readiness (backup verification and restore drill)
+
+Purpose: guarantee that a backup that was never restored is never trusted, and
+that the revert path is rehearsed before it is needed.
+
+15.1. **Verify every pre-release backup before trusting it.** After the backup
+      and before the release:
+      ```bash
+      sqlite3 data.db.bak "PRAGMA integrity_check;"   # must print 'ok'
+      sqlite3 data.db.bak "PRAGMA user_version;"      # must match the live DB
+      ```
+      Also compare the `videos` row count and `uploads/` file parity
+      (`find ... | sort | diff -`) plus a checksummed sample file.
+15.2. **Run a restore drill on a copy, never on live data.** Point a throwaway
+      app directory at the backup, run `PRAGMA integrity_check`, count rows,
+      and play one file through `/api/media` so the DB rows and the media
+      files are proven to still agree. Then delete the scratch copy.
+15.3. **Rehearse the `git revert` on a throwaway branch.** Because history is
+      linear, `git revert <release-commit>` applies cleanly — practice it:
+      branch → revert → `php -l` → smoke-test → delete the branch. A rollback
+      that was never tested is a rollback that fails under pressure.
+15.4. **A real rollback is a NEW patch release** (Section 3.10): `git revert`
+      the offending commit, re-run Phases 2–4 in the SAME commit, bump a patch,
+      and release. Never `reset --hard`, never force-push, never move a
+      published tag.
+15.5. **Restore the data BEFORE re-running reverted code.** If the release
+      touched the schema, the reverted code may not understand the newer
+      `user_version`: roll the code back first, then restore `data.db` and
+      `uploads/` from the pre-release backup, then smoke-test.
+
+### Phase 16 — Security and dependency advisory refresh
+
+Purpose: guarantee no released version ships a known-vulnerable dependency,
+with no CI to lean on.
+
+16.1. **Fixed monthly audit plus a pre-release gate.** Run `composer audit
+      --locked` on a fixed day AND before every release (Phase 2.7 already
+      blocks releases on findings when Composer exists). `--locked` audits
+      `composer.lock` without touching `vendor/`.
+16.2. **Enable Dependabot alerts and security updates** (event-driven, so they
+      fire on disclosure regardless of your cadence) and keep a
+      `.github/dependabot.yml` for the `composer` ecosystem, monthly, with a
+      groups block so routine bumps land as one PR.
+16.3. **Sync `vendor/` on every dependency change.** A Dependabot PR only edits
+      `composer.json` / `composer.lock`; because `vendor/` is bundled and
+      committed, run `composer install` (or `composer update <pkg>`) locally
+      and commit `composer.json` + `composer.lock` + `vendor/` in the SAME
+      commit, then re-run `composer audit --locked` and `php -l` before
+      shipping (Phase 2.3).
+16.4. **Optional second opinion with OSV** (`osv-scanner scan .` reads
+      `composer.lock` against OSV.dev, which aggregates GitHub Security
+      Advisories and FriendsOfPHP). Run on the same monthly cadence; the two
+      sources occasionally differ.
+16.5. **Triage every finding:** record CVE id + severity, judge reachability
+      for this app, then fix via 16.3 or log an approved exception (CVE id +
+      approval) per Section 9.7.4. Never silently skip a finding.
+
+### Phase 17 — Blameless postmortem / retrospective
+
+Purpose: turn every failure into a systemic fix — never a blame event — with
+tracked, verifiable action items.
+
+17.1. **Triggers:** a hotfix after a preview (Phase 9.3), a `git revert`
+      (Section 3.10), a restore from `data.db` backup, a broken-install
+      report, or an advisory hitting a shipped version. Write it within about
+      a week of the incident — promptness is accuracy.
+17.2. **Store the artifact in-repo** (`docs/postmortems/YYYY-MM-DD-v<tag>.md`)
+      and rebuild the timeline from records you already keep: `git log
+      --format='%ci %s' <bad_tag>..<fix_tag>`, `gh issue view <n>`, and the
+      release notes.
+17.3. **Use the SRE Workbook template sections** adapted to a one-person org:
+      Summary, Impact (with numbers), Timeline, Root Cause & Trigger, What went
+      well / went poorly, Action items (owner, due date, verifiable end state),
+      Lessons. Write blamelessly — "what condition allowed this", not "who did
+      this".
+17.4. **Close the loop through GitHub Issues:** one issue per action item, and
+      treat unresolved blockers as release blockers (Section 10).
+17.5. **Feed the MTTR ledger** for Phase 18: detected date = issue `createdAt`
+      or the preview date; restored date = the fixing release's `publishedAt`.
+
+### Phase 18 — Metrics and DORA reporting
+
+Purpose: derive the four DORA metrics from git history and GitHub releases
+alone — no CI required.
+
+18.1. **Deployment frequency** = releases per month: `gh release list --repo
+      fhfjjfjd/video-player-php --limit 500`, bucket `publishedAt` by month
+      (fall back to `git tag -l 'v*'` for pre-release tags). A
+      preview→stable promotion is one deploy.
+18.2. **Lead time for changes** per release = tag date minus the oldest commit
+      in that release's change set (`git log --format=%cI <prev_tag>..<tag> |
+      sort | head -1` vs `git show -s --format=%cI <tag>`). Report the
+      median/p75 over the last 30–90 days, never the mean.
+18.3. **MTTR** = detected → restored: `gh issue view <n> --json
+      createdAt,closedAt` for the issue that surfaced the break and `gh release
+      view vX.Y.Z --json publishedAt` for the fixing release (fall back to the
+      Phase 17 ledger).
+18.4. **Change failure rate** = failed releases ÷ total releases in the
+      window. A release "failed" if it needed a hotfix, a revert, was a preview
+      never promoted, or drew a broken-install report.
+18.5. **Report once per quarter** into `docs/metrics.md` or the changelog: one
+      number per metric plus a trend beats a dashboard for a solo maintainer.
+      Note which inputs are estimates.
+
+### Phase 19 — Feedback triage and roadmap loop-back
+
+Purpose: route every piece of feedback — issues, surveys, metrics, postmortem
+actions — back into Phase 0 so nothing is dropped.
+
+19.1. **Review the open issue queue** (Section 5) and the Phase 12 survey
+      clusters; label and, where possible, estimate each item.
+19.2. **Decide the outcome for each item:** classify it for the next cycle as
+      `feature` / `bugfix` / `breaking` / `chore` (Phase 1.2) or decline it
+      explicitly — with a polite reply in the reporter's language (Section 5).
+      An item with no decision is still open.
+19.3. **When the released version is healthy** (Phases 11–18 green) and the
+      triage is done, record the baseline and the cycle is complete. The next
+      change starts again at Phase 0.
+19.4. **Never silently drop feedback.** Every report gets a triage outcome and
+      the reporter hears it, closing the loop.
 
 ---
 
@@ -566,7 +804,7 @@ Rules:
   (e.g. "Video Player" / "VideoPlayer"), never a real personal name, persona,
   or any information that could identify a real person.
 - **Closing is the final step.** Close the issue ONLY in Phase 10.1, AFTER the
-  whole workflow is done: compile, tests, docs, security review, changelog,
+  release work is done: compile, tests, docs, security review, changelog,
   version bump, commit, push, tag, preview, and stable release (Phases 2 → 10).
   Never close after merely re-reading the issue, and never close before the
   change is committed, pushed, and released. Then reply on the issue
