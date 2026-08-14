@@ -183,4 +183,5 @@ registration is pending.
 - `assets/` — static files: `css/app.css`, `js/app.js`, `js/hls.min.js`, `favicon.svg`
 - `scripts/install.sh` / `scripts/install.bat` — one-command installers
 - `scripts/start.sh` / `scripts/start.cmd` — start the app via `php -S`
+- `CHANGELOG.md` / `CHANGELOG.vi.md` — release history (Keep a Changelog format)
 - `vendor/` — bundled PHP dependencies (Symfony + PHPMailer), no Composer needed

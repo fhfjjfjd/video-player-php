@@ -158,4 +158,5 @@ chờ xác thực.
 - `assets/` — file tĩnh: `css/app.css`, `js/app.js`, `js/hls.min.js`, `favicon.svg`
 - `scripts/install.sh` / `scripts/install.bat` — installer một lệnh
 - `scripts/start.sh` / `scripts/start.cmd` — khởi động ứng dụng qua `php -S`
+- `CHANGELOG.md` / `CHANGELOG.vi.md` — lịch sử phát hành (định dạng Keep a Changelog)
 - `vendor/` — dependencies PHP được bundle sẵn (Symfony + PHPMailer), không cần Composer
