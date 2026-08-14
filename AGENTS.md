@@ -104,8 +104,17 @@ complete them on their own deadlines.
 ### Phase 0 — Intake and reconnaissance
 
 0.1. **Check open GitHub Issues.** Run
-     `gh issue list --repo fhfjjfjd/video-player-php`. Read EVERY open issue
-     completely (title AND body). Never act on a title alone.
+     `gh issue list --repo fhfjjfjd/video-player-php` and read EVERY open
+     issue COMPLETELY before acting: title, full body, ALL comments
+     (`gh issue view <n> -c`), and the issue's live state — `createdAt` /
+     `updatedAt`, labels, reactions (upvotes signal demand), `assignees`,
+     `milestone`, and linked PRs / `closedByPullRequestsReferences` (a
+     "fixes #n" PR may mean the work is already done). Search for duplicates
+     with the report's own keywords
+     (`gh issue list --repo fhfjjfjd/video-player-php --search '<terms>
+     in:title,body' --state all`) before deep-reading. Never act on a title
+     alone and never judge an issue from a partial read — the body can be
+     edited and comments added while you work.
 
 0.2. **Confirm repository state.** Run `git status`, `git log --oneline -10`,
      and `git remote -v`. Confirm you are on `main`, the working tree matches
@@ -351,7 +360,9 @@ complete them on their own deadlines.
 10.1. **Close fixed issues.** If any open GitHub Issue was addressed by this
       work, reply on the issue explaining what was done (in a language the
       reporter can read, matching theirs if possible) and close it:
-      `gh issue close <number> --comment "<explanation>"`.
+      `gh issue close <number> --comment "<thanks + what changed + version + how to reopen>"`.
+      See Section 5 for the full closing-comment structure and the reply
+      templates.
 
 10.2. **Confirm a clean tree.** Run `git status` and confirm nothing is left
       uncommitted or untracked.
@@ -774,17 +785,57 @@ Rules:
 
 - Check the GitHub Issues for this repository when starting work and after
   every change: `gh issue list --repo fhfjjfjd/video-player-php`.
-- Read every open issue COMPLETELY (title + body) before acting. Never act on
-  the title alone.
+- **Read every open issue COMPLETELY before acting** — never act on the title
+  alone. A full read is: title, full body, ALL comments
+  (`gh issue view <n> -c`), and the issue's live metadata — `createdAt` /
+  `updatedAt`, labels, reactions (upvotes signal demand), `assignees`,
+  `milestone`, and linked PRs / `closedByPullRequestsReferences` (a "fixes #n"
+  PR may mean the work already shipped). Search for duplicates with the
+  report's own keywords before deep-reading
+  (`gh issue list --repo fhfjjfjd/video-player-php --search '<terms>
+  in:title,body' --state all`); close obvious duplicates with a polite note
+  and a link to the canonical issue.
+- **Interpret the report, don't just transcribe it.** Treat the reporter's
+  words as symptoms, not a diagnosis: "không xem được" could mean the list,
+  the watch page, or the stream — three different fixes. Map vague phrases to
+  surfaces (login → `src/accounts.php` + session/verify flow; upload →
+  `MAX_UPLOAD_SIZE` / `uploads/`; playback → `/api/media` HMAC token + HLS;
+  listing → the 10 s video-list cache). When evidence is missing, the single
+  highest-value fact is the exact error text; a screenshot of the watch page
+  plus the URL bar beats a paragraph.
+- **Clarify vs. act.** Ask ONE targeted, polite clarifying question (in the
+  reporter's language, with ready-made options a non-technical user can pick)
+  when the surface is ambiguous or two plausible readings need different
+  fixes. Never guess a version or a surface — ask. When the interpretation is
+  unambiguous and low-risk, act on what is written. Never let a vague report
+  sit unasked and unfixed.
+- **Triage cadence.** Acknowledge every report within about 48–72 h (a label
+  or one sentence beats silence) and hold a fixed weekly triage slot instead
+  of drip-checking daily. Publish that this is a one-person project with
+  replies in days, not hours. Security-related reports (auth, injection,
+  secret exposure) are handled immediately — never discuss exploit details
+  publicly.
+- **Stale policy.** An issue awaiting a reporter's answer is stale after 14
+  days of silence; an untriaged issue after 90 days. Send ONE gentle bump
+  ("still relevant? otherwise I'll close it — you can always reopen"), then
+  close after 7 more silent days. Never close a confirmed bug, an in-progress
+  item, or a shipped-feature tracker for inactivity alone.
+- **Reuse short reply templates** for the four common outcomes — request-more-
+  info, duplicate, decline (wontfix), and shipped. Each is: thanks → one-line
+  reason → next step → how to reopen. Keep a copy in BOTH English and
+  Vietnamese (e.g. as GitHub saved replies, with a versioned copy in the
+  repo) so every response is warm, plain, and consistent.
 - If an issue asks for a fix/feature, implement it following the workflow
   above (Phase 0 → 10).
 - **Re-read the issue after every compile.** Issues can change while you work:
-  the reporter may edit the body or add comments. Each time you compile or
-  build the code (Phase 2, `php -l`, etc.), run
-  `gh issue view <number>` again and check the body, comments, and
-  `updatedAt`. If anything changed, fold the new information into the work
-  before continuing. Never finish against a stale version of the request.
-  Re-reading is ONLY to catch changes — it is NOT the signal to close.
+  the reporter may edit the body, add comments, attach screenshots, or answer
+  your clarifying question. Each time you compile or build the code (Phase 2,
+  `php -l`, etc.), run `gh issue view <number> -c` again and check the body,
+  every comment, `updatedAt`, and any new labels. If anything changed, fold
+  the new information into the work before continuing — building against your
+  guess instead of the reporter's answer ships the wrong fix. Never finish
+  against a stale version of the request. Re-reading is ONLY to catch changes
+  — it is NOT the signal to close.
 - **Replies must be polite and clear.** Always answer the reporter with
   courtesy and respect: greet/thank them, state the answer in plain language,
   explain the reason briefly, and confirm the outcome. Never give a curt,
@@ -807,11 +858,12 @@ Rules:
   release work is done: compile, tests, docs, security review, changelog,
   version bump, commit, push, tag, preview, and stable release (Phases 2 → 10).
   Never close after merely re-reading the issue, and never close before the
-  change is committed, pushed, and released. Then reply on the issue
-  explaining what was done and close it:
-  `gh issue close <number> --comment "<explanation>"`. Write the reply in any
-  language (matching the issue's language if you can) so the reporter can read
-  it.
+  change is committed, pushed, and released. The closing comment is the
+  permanent record a future searcher will read, so make it count: thanks,
+  what changed in plain language, which version ships it, how to test, and
+  how to reopen:
+  `gh issue close <number> --comment "<thanks + what changed + version + how to reopen>"`.
+  Write the reply entirely in the reporter's language so they can read it.
 - Never reopen or "fix" issues that are already closed.
 
 ---
