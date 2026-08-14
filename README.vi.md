@@ -40,6 +40,10 @@ phải cài database riêng.
 - hls.js phát HLS (bundle tại `assets/js/hls.min.js`)
 - Dependencies PHP được bundle sẵn trong `vendor/` — không cần Composer lúc cài đặt
 
+> **Lưu ý:** Công nghệ không cố định. Ngôn ngữ lập trình và công nghệ mà dự án
+> sử dụng có thể thay đổi bất cứ lúc nào — tài liệu này sẽ được cập nhật để
+> phản ánh công nghệ hiện tại của dự án.
+
 ## Hiệu năng & cache
 
 - **Nén gzip ở mọi nơi trừ media** — trang HTML, phản hồi API JSON và file tĩnh dạng văn bản (`text/*`, JSON, JS, SVG, XML, WASM) được nén ngay lập tức bằng `ob_gzhandler` kèm `Vary: Accept-Encoding`. Luồng media không bao giờ bị nén: player cần đúng byte range để tua mượt.

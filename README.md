@@ -40,6 +40,10 @@ database to install.
 - hls.js for HLS playback (vendored at `assets/js/hls.min.js`)
 - PHP dependencies are bundled in `vendor/` — no Composer needed at install time
 
+> **Note:** The tech stack is not set in stone. The programming language and
+> technologies used by this project may change at any time — this document is
+> updated to reflect whatever the current stack is.
+
 ## Performance & caching
 
 - **gzip everywhere except media** — pages, JSON API responses and text assets
