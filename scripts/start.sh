@@ -21,4 +21,10 @@ command -v php >/dev/null 2>&1 || {
 }
 
 echo "[videohub] Starting Video Player on http://${HOST}:${PORT} (workers: ${WORKERS})"
-PHP_CLI_SERVER_WORKERS="$WORKERS" exec php -S "${HOST}:${PORT}" index.php
+PHP_CLI_SERVER_WORKERS="$WORKERS" exec php \
+    -d opcache.enable=1 \
+    -d opcache.enable_cli=1 \
+    -d opcache.revalidate_freq=0 \
+    -d opcache.jit_buffer_size=32M \
+    -d opcache.jit=1255 \
+    -S "${HOST}:${PORT}" index.php

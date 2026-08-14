@@ -38,11 +38,14 @@ if ($path === '/favicon.svg' || str_starts_with($path, '/assets/')) {
 /* ------------------------------------------------------------------- API */
 
 if (str_starts_with($path, '/api/')) {
+    if ($path !== '/api/media') begin_gzip();
     dispatch_api($method, $path);
     exit;
 }
 
 /* ---------------------------------------------------------------- pages */
+
+begin_gzip();
 
 if ($method === 'GET') {
     if ($path === '/') {
@@ -97,9 +100,21 @@ function serve_static_file(string $path): void {
         echo 'Not Found';
         return;
     }
-    header('Content-Type: ' . mime_for_path($file));
-    header('Content-Length: ' . (string)filesize($file));
-    header('Cache-Control: public, max-age=3600');
+    $mime = mime_for_path($file);
+    header('Content-Type: ' . $mime);
+    if (mime_is_compressible($mime) && accept_gzip() && function_exists('ob_gzhandler')) {
+        header('Vary: Accept-Encoding');
+        ob_start('ob_gzhandler');
+    } else {
+        header('Content-Length: ' . (string)filesize($file));
+    }
+    // The vendored hls.js bundle is version-pinned in the repo and rarely
+    // changes — let browsers cache it long-term.
+    if ($path === '/assets/js/hls.min.js') {
+        header('Cache-Control: public, max-age=31536000, immutable');
+    } else {
+        header('Cache-Control: public, max-age=3600');
+    }
     readfile($file);
 }
 
@@ -138,39 +153,18 @@ function submit_register(): void {
     $username = isset($_POST['username']) ? trim((string)$_POST['username']) : '';
     $email    = isset($_POST['email']) ? strtolower(trim((string)$_POST['email'])) : '';
     $password = isset($_POST['password']) ? (string)$_POST['password'] : '';
+    $back     = '/register?username=' . urlencode($username) . '&email=' . urlencode($email);
 
     $errors = validate_payload(['username' => $username, 'email' => $email, 'password' => $password], register_constraints());
     if ($errors !== []) {
-        redirect('/register?error=' . urlencode((string)reset($errors))
-            . '&username=' . urlencode($username) . '&email=' . urlencode($email));
-    }
-    if (find_user_by_username($username) !== null) {
-        redirect('/register?error=' . urlencode('Username đã tồn tại.') . '&username=' . urlencode($username) . '&email=' . urlencode($email));
-    }
-    if (find_user_by_email($email) !== null) {
-        redirect('/register?error=' . urlencode('Email Gmail này đã được dùng để đăng ký.') . '&username=' . urlencode($username) . '&email=' . urlencode($email));
-    }
-    if (!smtp_configured()) {
-        redirect('/register?error=' . urlencode('Chưa cấu hình SMTP nên không thể gửi email xác thực. Vui lòng liên hệ quản trị viên.') . '&username=' . urlencode($username) . '&email=' . urlencode($email));
+        redirect($back . '&error=' . urlencode((string)reset($errors)));
     }
 
-    $code       = generate_verification_code();
-    $expiresAt  = date('Y-m-d H:i:s', time() + VERIFICATION_TTL_SEC);
-    $passwordHash = hash_password($password);
-    save_email_verification($username, $email, $passwordHash, hash_verification_code($code), $expiresAt);
-
-    if (!send_verification_email($email, $code)) {
-        delete_email_verification($email);
-        redirect('/register?error=' . urlencode('Không thể gửi email xác thực. Vui lòng kiểm tra cấu hình SMTP và thử lại.') . '&username=' . urlencode($username) . '&email=' . urlencode($email));
+    $result = account_register($username, $email, $password);
+    if (isset($result['error'])) {
+        redirect($back . '&error=' . urlencode($result['error']));
     }
-    redirect('/verify?email=' . urlencode($email) . '&ok=' . urlencode('Đã gửi mã xác thực tới email của bạn.'));
-}
-
-function login_and_set_cookie(int $uid): void {
-    $secret = load_media_secret();
-    $token  = create_session_token($uid, $secret);
-    create_session($uid, $token, (string)(time() + SESSION_TTL_SEC));
-    set_session_cookie($token);
+    redirect('/verify?email=' . urlencode($result['email']) . '&ok=' . urlencode($result['message']));
 }
 
 function submit_login(): void {
@@ -183,30 +177,13 @@ function submit_login(): void {
         redirect('/login?error=' . urlencode((string)reset($errors)) . '&username=' . urlencode($identifier));
     }
 
-    $user = find_user_by_identifier($identifier);
-    if ($user === null || !verify_password($password, (string)$user['password_hash'])) {
-        redirect('/login?error=' . urlencode('Sai Gmail/username hoặc password.') . '&username=' . urlencode($identifier));
+    $result = account_login($identifier, $password);
+    if (isset($result['error'])) {
+        redirect('/login?error=' . urlencode($result['error']) . '&username=' . urlencode($identifier));
     }
-
-    if ((int)$user['email_verified'] !== 1) {
-        $email = isset($user['email']) && is_string($user['email']) ? (string)$user['email'] : '';
-        if ($email === '') {
-            redirect('/login?error=' . urlencode('Tài khoản này chưa có email nên không thể xác thực.'));
-        }
-        if (!smtp_configured()) {
-            redirect('/login?error=' . urlencode('Tài khoản của bạn chưa xác thực email. Hiện máy chủ chưa cấu hình SMTP nên không thể gửi mã xác thực.'));
-        }
-        $code      = generate_verification_code();
-        $expiresAt = date('Y-m-d H:i:s', time() + VERIFICATION_TTL_SEC);
-        save_email_verification((string)$user['username'], $email, (string)$user['password_hash'], hash_verification_code($code), $expiresAt);
-        if (!send_verification_email($email, $code)) {
-            delete_email_verification($email);
-            redirect('/login?error=' . urlencode('Không thể gửi email xác thực. Vui lòng kiểm tra cấu hình SMTP và thử lại.'));
-        }
-        redirect('/verify?email=' . urlencode($email) . '&ok=' . urlencode('Tài khoản chưa xác thực email. Chúng tôi đã gửi mã xác thực tới email của bạn.'));
+    if (isset($result['need_verify'])) {
+        redirect('/verify?email=' . urlencode($result['email']) . '&ok=' . urlencode('Tài khoản chưa xác thực email. Chúng tôi đã gửi mã xác thực tới email của bạn.'));
     }
-
-    login_and_set_cookie((int)$user['id']);
     redirect('/');
 }
 
@@ -223,38 +200,10 @@ function submit_verify(): void {
         redirect($back . '&error=' . urlencode('Mã xác thực phải gồm 6 chữ số.'));
     }
 
-    $pending = find_email_verification($email);
-    if ($pending === null) {
-        redirect($back . '&error=' . urlencode('Không tìm thấy yêu cầu xác thực cho email này.'));
+    $result = account_verify($email, $code);
+    if (isset($result['error'])) {
+        redirect($back . '&error=' . urlencode($result['error']));
     }
-    if (strtotime((string)$pending['expires_at']) < time()) {
-        delete_email_verification($email);
-        redirect($back . '&error=' . urlencode('Mã xác thực đã hết hạn. Vui lòng gửi lại mã.'));
-    }
-    if (!hash_equals((string)$pending['code_hash'], hash_verification_code($code))) {
-        redirect($back . '&error=' . urlencode('Mã xác thực không đúng.'));
-    }
-
-    $existing = find_user_by_email($email);
-    if ($existing !== null) {
-        delete_email_verification($email);
-        $id = (int)$existing['id'];
-        if ((int)$existing['email_verified'] !== 1) {
-            mark_user_verified($id);
-        }
-    } else {
-        if (find_user_by_username((string)$pending['username']) !== null) {
-            delete_email_verification($email);
-            redirect($back . '&error=' . urlencode('Tài khoản đã tồn tại.'));
-        }
-        $id = create_user((string)$pending['username'], $email, (string)$pending['password_hash']);
-        delete_email_verification($email);
-        if ($id === null) {
-            redirect($back . '&error=' . urlencode('Không thể tạo tài khoản, vui lòng thử lại.'));
-        }
-    }
-
-    login_and_set_cookie($id);
     redirect('/?ok=' . urlencode('Đăng nhập thành công.'));
 }
 
@@ -266,23 +215,12 @@ function submit_resend(): void {
     if ($email === '') {
         redirect('/verify?error=' . urlencode('Thiếu email.'));
     }
-    if (!smtp_configured()) {
-        redirect($back . '&error=' . urlencode('Chưa cấu hình SMTP nên không thể gửi email xác thực.'));
-    }
 
-    $pending = find_email_verification($email);
-    if ($pending === null) {
-        redirect($back . '&error=' . urlencode('Không tìm thấy yêu cầu xác thực cho email này.'));
+    $result = account_resend($email);
+    if (isset($result['error'])) {
+        redirect($back . '&error=' . urlencode($result['error']));
     }
-
-    $code      = generate_verification_code();
-    $expiresAt = date('Y-m-d H:i:s', time() + VERIFICATION_TTL_SEC);
-    save_email_verification((string)$pending['username'], $email, (string)$pending['password_hash'], hash_verification_code($code), $expiresAt);
-
-    if (!send_verification_email($email, $code)) {
-        redirect($back . '&error=' . urlencode('Không thể gửi email xác thực. Vui lòng kiểm tra cấu hình SMTP và thử lại.'));
-    }
-    redirect($back . '&ok=' . urlencode('Đã gửi lại mã xác thực tới email của bạn.'));
+    redirect($back . '&ok=' . urlencode($result['message']));
 }
 
 function submit_logout(): void {
@@ -387,29 +325,12 @@ function handle_register(): void {
     $email    = strtolower(trim((string)$data['email']));
     $password = (string)$data['password'];
 
-    if (find_user_by_username($username) !== null) {
-        respond_json(409, err('Username đã tồn tại.'));
+    $result = account_register($username, $email, $password);
+    if (isset($result['error'])) {
+        respond_json($result['status'] ?? 400, err($result['error']));
         return;
     }
-    if (find_user_by_email($email) !== null) {
-        respond_json(409, err('Email Gmail này đã được dùng để đăng ký.'));
-        return;
-    }
-    if (!smtp_configured()) {
-        respond_json(503, err('Chưa cấu hình SMTP nên không thể gửi email xác thực. Vui lòng liên hệ quản trị viên.'));
-        return;
-    }
-    $code       = generate_verification_code();
-    $expiresAt  = date('Y-m-d H:i:s', time() + VERIFICATION_TTL_SEC);
-    $passwordHash = hash_password($password);
-    save_email_verification($username, $email, $passwordHash, hash_verification_code($code), $expiresAt);
-
-    if (!send_verification_email($email, $code)) {
-        delete_email_verification($email);
-        respond_json(503, err('Không thể gửi email xác thực. Vui lòng kiểm tra cấu hình SMTP và thử lại.'));
-        return;
-    }
-    respond_json(202, ['ok' => true, 'message' => 'Đã gửi mã xác thực tới email của bạn.']);
+    respond_json(202, ['ok' => true, 'message' => $result['message']]);
 }
 
 function handle_verify_email(): void {
@@ -429,42 +350,12 @@ function handle_verify_email(): void {
         respond_json(400, err('Mã xác thực phải gồm 6 chữ số.'));
         return;
     }
-    $pending = find_email_verification($email);
-    if ($pending === null) {
-        respond_json(400, err('Không tìm thấy yêu cầu xác thực cho email này.'));
+    $result = account_verify($email, $code);
+    if (isset($result['error'])) {
+        respond_json($result['status'] ?? 400, err($result['error']));
         return;
     }
-    if (strtotime((string)$pending['expires_at']) < time()) {
-        delete_email_verification($email);
-        respond_json(410, err('Mã xác thực đã hết hạn. Vui lòng gửi lại mã.'));
-        return;
-    }
-    if (!hash_equals((string)$pending['code_hash'], hash_verification_code($code))) {
-        respond_json(400, err('Mã xác thực không đúng.'));
-        return;
-    }
-    $existing = find_user_by_email($email);
-    if ($existing !== null) {
-        delete_email_verification($email);
-        $id = (int)$existing['id'];
-        if ((int)$existing['email_verified'] !== 1) {
-            mark_user_verified($id);
-        }
-    } else {
-        if (find_user_by_username((string)$pending['username']) !== null) {
-            delete_email_verification($email);
-            respond_json(409, err('Tài khoản đã tồn tại.'));
-            return;
-        }
-        $id = create_user((string)$pending['username'], $email, (string)$pending['password_hash']);
-        delete_email_verification($email);
-        if ($id === null) {
-            respond_json(500, err('Failed to create user'));
-            return;
-        }
-    }
-    login_and_set_cookie($id);
-    respond_json(200, ['ok' => true, 'user' => ['id' => $id, 'username' => $existing !== null ? (string)$existing['username'] : (string)$pending['username']]]);
+    respond_json(200, ['ok' => true, 'user' => $result['user']]);
 }
 
 function handle_resend_verification(): void {
@@ -479,24 +370,12 @@ function handle_resend_verification(): void {
         respond_json(400, err('Thiếu email.'));
         return;
     }
-    if (!smtp_configured()) {
-        respond_json(503, err('Chưa cấu hình SMTP nên không thể gửi email xác thực.'));
+    $result = account_resend($email);
+    if (isset($result['error'])) {
+        respond_json($result['status'] ?? 400, err($result['error']));
         return;
     }
-    $pending = find_email_verification($email);
-    if ($pending === null) {
-        respond_json(400, err('Không tìm thấy yêu cầu xác thực cho email này.'));
-        return;
-    }
-    $code      = generate_verification_code();
-    $expiresAt = date('Y-m-d H:i:s', time() + VERIFICATION_TTL_SEC);
-    save_email_verification((string)$pending['username'], $email, (string)$pending['password_hash'], hash_verification_code($code), $expiresAt);
-
-    if (!send_verification_email($email, $code)) {
-        respond_json(503, err('Không thể gửi email xác thực. Vui lòng kiểm tra cấu hình SMTP và thử lại.'));
-        return;
-    }
-    respond_json(200, ['ok' => true, 'message' => 'Đã gửi lại mã xác thực tới email của bạn.']);
+    respond_json(200, ['ok' => true, 'message' => $result['message']]);
 }
 
 function handle_login(): void {
@@ -513,41 +392,21 @@ function handle_login(): void {
     }
     $identifier = (string)$data['username'];
     $password   = (string)$data['password'];
-    $user = find_user_by_identifier($identifier);
-    if ($user === null || !verify_password($password, (string)$user['password_hash'])) {
-        respond_json(401, err('Sai Gmail/username hoặc password.'));
+
+    $result = account_login($identifier, $password);
+    if (isset($result['error'])) {
+        respond_json($result['status'] ?? 400, err($result['error']));
         return;
     }
-    if ((int)$user['email_verified'] !== 1) {
-        $email = isset($user['email']) && is_string($user['email']) ? (string)$user['email'] : '';
-        if ($email === '') {
-            respond_json(403, err('Tài khoản này chưa có email nên không thể xác thực.'));
-            return;
-        }
-        if (!smtp_configured()) {
-            respond_json(403, err('Tài khoản của bạn chưa xác thực email. Hiện máy chủ chưa cấu hình SMTP nên không thể gửi mã xác thực.'));
-            return;
-        }
-        $code      = generate_verification_code();
-        $expiresAt = date('Y-m-d H:i:s', time() + VERIFICATION_TTL_SEC);
-        save_email_verification((string)$user['username'], $email, (string)$user['password_hash'], hash_verification_code($code), $expiresAt);
-        if (!send_verification_email($email, $code)) {
-            delete_email_verification($email);
-            respond_json(503, err('Không thể gửi email xác thực. Vui lòng kiểm tra cấu hình SMTP và thử lại.'));
-            return;
-        }
+    if (isset($result['need_verify'])) {
         respond_json(403, [
             'code'    => 'EMAIL_NOT_VERIFIED',
-            'email'   => $email,
-            'message' => 'Tài khoản chưa xác thực email. Chúng tôi đã gửi mã xác thực tới ' . $email . '.',
+            'email'   => $result['email'],
+            'message' => 'Tài khoản chưa xác thực email. Chúng tôi đã gửi mã xác thực tới ' . $result['email'] . '.',
         ]);
         return;
     }
-    login_and_set_cookie((int)$user['id']);
-    respond_json(200, ['user' => [
-        'id'       => (int)$user['id'],
-        'username' => (string)$user['username'],
-    ]]);
+    respond_json(200, ['user' => $result['user']]);
 }
 
 function handle_logout(): void {
@@ -563,7 +422,7 @@ function handle_logout(): void {
 function handle_list_videos(): void {
     rate_limit_apply('list_videos');
     $q = $_GET['q'] ?? '';
-    $rows = list_all_videos(is_string($q) ? $q : '');
+    $rows = list_videos_cached(is_string($q) ? $q : '');
     $uid = current_user_id();
     $viewer = $uid > 0 ? $uid : null;
     $secret = load_media_secret();
@@ -774,7 +633,7 @@ function handle_media(): void {
     if ($start > 0) fseek($fp, $start);
     $remaining = $end - $start + 1;
     while ($remaining > 0 && !feof($fp)) {
-        $chunk = fread($fp, min(8192, $remaining));
+        $chunk = fread($fp, min(262144, $remaining));
         if ($chunk === false || $chunk === '') break;
         echo $chunk;
         $remaining -= strlen($chunk);

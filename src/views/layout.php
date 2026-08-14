@@ -42,7 +42,7 @@
 </main>
 
 <script src="/assets/js/app.js"></script>
-<?php if (($view === 'watch')): ?>
+<?php if ($view === 'watch' && !empty($loadHls)): ?>
 <script src="/assets/js/hls.min.js"></script>
 <?php endif; ?>
 </body>

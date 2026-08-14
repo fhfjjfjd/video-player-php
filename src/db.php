@@ -20,6 +20,8 @@ function db(): PDO {
         $pdo = new PDO('sqlite:' . db_path());
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->exec('PRAGMA journal_mode = WAL;');
+        $pdo->exec('PRAGMA synchronous = NORMAL;');      // safe with WAL, much faster writes
+        $pdo->exec('PRAGMA temp_store = MEMORY;');       // keep temp tables in RAM
         $pdo->exec('PRAGMA foreign_keys = ON;');
         db_init($pdo);
     }
@@ -35,23 +37,6 @@ function db_init(PDO $pdo): void {
         . 'email TEXT,'
         . 'created_at TEXT NOT NULL DEFAULT (datetime(\'now\')));'
     );
-    $userCols = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
-    $hasVerified = false;
-    $hasRole = false;
-    foreach ($userCols as $c) {
-        $name = strtolower((string)$c['name']);
-        if ($name === 'email_verified') {
-            $hasVerified = true;
-        } elseif ($name === 'role') {
-            $hasRole = true;
-        }
-    }
-    if (!$hasVerified) {
-        $pdo->exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
-    }
-    if (!$hasRole) {
-        $pdo->exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
-    }
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS sessions ('
         . 'token TEXT PRIMARY KEY,'
@@ -90,6 +75,74 @@ function db_init(PDO $pdo): void {
         . 'expires_at TEXT NOT NULL,'
         . 'created_at TEXT NOT NULL DEFAULT (datetime(\'now\')));'
     );
+
+    // One-time migrations, tracked via PRAGMA user_version (cheaper than
+    // re-scanning table_info on every connection).
+    $version = (int)$pdo->query('PRAGMA user_version')->fetchColumn();
+    if ($version < 1) {
+        $userCols = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
+        $hasVerified = false;
+        $hasRole = false;
+        foreach ($userCols as $c) {
+            $name = strtolower((string)$c['name']);
+            if ($name === 'email_verified') {
+                $hasVerified = true;
+            } elseif ($name === 'role') {
+                $hasRole = true;
+            }
+        }
+        if (!$hasVerified) {
+            $pdo->exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
+        }
+        if (!$hasRole) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+        }
+        $pdo->exec('PRAGMA user_version = 1');
+    }
+
+    // Query-plan indexes for the hottest read and write paths.
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_videos_created_at ON videos(created_at, id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_email_verifications_email ON email_verifications(email)');
+}
+
+/* ------------------------------------------------------ video list cache */
+
+/**
+ * Short-lived shared cache for the video library. The PHP built-in server
+ * runs several workers, so caching the list on disk (FilesystemAdapter —
+ * already used by the rate limiter) keeps the home page and the API from
+ * hammering SQLite on every request. The cache is invalidated on upload and
+ * delete, so changes appear immediately.
+ */
+function video_list_cache(): Symfony\Component\Cache\Adapter\FilesystemAdapter {
+    static $pool = null;
+    if ($pool === null) {
+        $pool = new Symfony\Component\Cache\Adapter\FilesystemAdapter(
+            'videolist',
+            0,
+            server_root() . '/cache/videolist'
+        );
+    }
+    return $pool;
+}
+
+const VIDEO_LIST_CACHE_TTL_SEC = 10;
+
+function list_videos_cached(string $query): array {
+    $pool = video_list_cache();
+    $item = $pool->getItem('vlist_' . substr(bin2hex(hash('sha256', $query, true)), 0, 32));
+    if ($item->isHit()) {
+        return $item->get();
+    }
+    $rows = list_all_videos($query);
+    $item->set($rows)->expiresAfter(VIDEO_LIST_CACHE_TTL_SEC);
+    $pool->save($item);
+    return $rows;
+}
+
+function clear_video_list_cache(): void {
+    video_list_cache()->clear();
 }
 
 function create_user(string $username, string $email, string $hash): ?int {
@@ -195,7 +248,9 @@ function create_video(int $userId, string $title, string $filename, int $size, s
     try {
         $st = db()->prepare('INSERT INTO videos (user_id, title, filename, size, content_type, thumbnail_filename) VALUES (?, ?, ?, ?, ?, ?)');
         $st->execute([$userId, $title, $filename, $size, $contentType, $thumb]);
-        return (int)db()->lastInsertId();
+        $id = (int)db()->lastInsertId();
+        clear_video_list_cache();
+        return $id;
     } catch (PDOException $e) {
         return null;
     }
@@ -236,4 +291,5 @@ function find_video_by_filename(string $filename): ?array {
 function delete_video(int $id): void {
     $st = db()->prepare('DELETE FROM videos WHERE id = ?');
     $st->execute([$id]);
+    clear_video_list_cache();
 }

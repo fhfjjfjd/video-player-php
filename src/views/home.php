@@ -1,6 +1,6 @@
 <?php /* home.php — library with search, video grid and upload modal. */
 $q = isset($_GET['q']) && is_string($_GET['q']) ? trim($_GET['q']) : '';
-$rows = list_all_videos($q);
+$rows = list_videos_cached($q);
 $secret = load_media_secret();
 $uid = current_user_id();
 ?>
@@ -25,7 +25,7 @@ $uid = current_user_id();
       <a class="video-card" href="/video/<?= (int)$row['id'] ?>">
         <div class="video-card-media">
           <?php if ($thumb !== ''): ?>
-            <img src="<?= e(media_url($thumb)) ?>" alt="" loading="lazy">
+            <img src="<?= e(media_url($thumb)) ?>" alt="" loading="lazy" decoding="async">
           <?php else: ?>
             <div class="video-card-nothumb"></div>
           <?php endif; ?>

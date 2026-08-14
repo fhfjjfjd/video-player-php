@@ -25,15 +25,30 @@ phải cài database riêng.
 - Xác thực mọi payload phía server bằng Symfony Validator — thông báo tiếng Việt
 - Player đầy đủ (thẻ video gốc + hls.js cho luồng HLS `.m3u8`)
 - Nút "Góp ý" mở trang GitHub Issues của dự án; nút "Nguồn" liên kết tới kho chứa này
+- Nén phản hồi: trang HTML, API JSON và file tĩnh dạng văn bản được nén gzip (`Vary: Accept-Encoding`); luồng media luôn được phát thô để Range request và tua nhanh vẫn mượt
+- Cache thư viện video dùng chung: trang chủ và API đọc danh sách video từ cache dùng chung ngắn hạn (10 giây) thay vì truy vấn SQLite mỗi lần — tự xóa ngay khi tải lên hoặc xóa video
+- Tinh chỉnh SQLite: WAL journal + `synchronous=NORMAL` + bảng tạm trong RAM, chỉ mục tối ưu truy vấn, và migration chạy một lần qua `PRAGMA user_version` (không quét schema mỗi kết nối)
+- Bật sẵn OPcache + JIT: các start script khởi động PHP với cache bytecode và JIT tracing để request lặp lại không phải biên dịch lại ứng dụng
+- `hls.min.js` bản vendor chỉ được tải trên các trang watch thực sự phát HLS, và được trình duyệt cache một năm
 
 ## Công nghệ
 
 - PHP 8.1+ — ứng dụng render phía server thuần PHP, không framework frontend, không bước build
 - SQLite qua PDO — không cần cài database riêng (`data.db`)
-- Các component Symfony: `validator` (xác thực dữ liệu), `rate-limiter` (giới hạn theo IP), `security-core` (voter + phân quyền theo vai trò)
+- Các component Symfony: `validator` (xác thực dữ liệu), `rate-limiter` (giới hạn theo IP), `cache` (cache danh sách video dùng chung + lưu trữ rate limiter), `security-core` (voter + phân quyền theo vai trò)
 - PHPMailer gửi email qua SMTP
 - hls.js phát HLS (bundle tại `assets/js/hls.min.js`)
 - Dependencies PHP được bundle sẵn trong `vendor/` — không cần Composer lúc cài đặt
+
+## Hiệu năng & cache
+
+- **Nén gzip ở mọi nơi trừ media** — trang HTML, phản hồi API JSON và file tĩnh dạng văn bản (`text/*`, JSON, JS, SVG, XML, WASM) được nén ngay lập tức bằng `ob_gzhandler` kèm `Vary: Accept-Encoding`. Luồng media không bao giờ bị nén: player cần đúng byte range để tua mượt.
+- **Cache danh sách video** — `list_videos_cached()` giữ thư viện (kể cả kết quả tìm kiếm) trong cache FilesystemAdapter dùng chung trong 10 giây. Tải lên và xóa video xóa cache ngay lập tức, nên thư viện luôn mới mà không cần mọi request đều truy vấn SQLite.
+- **Tinh chỉnh SQLite** — WAL journaling, `synchronous=NORMAL` (an toàn khi dùng WAL, ghi nhanh hơn nhiều), `temp_store=MEMORY`, chỉ mục trên `videos(created_at, id)`, `videos(user_id)` và `email_verifications(email)`, và migration chạy qua `PRAGMA user_version` để việc kiểm tra schema chỉ diễn ra một lần, không phải mỗi kết nối.
+- **OPcache + JIT** — `scripts/start.sh` và `scripts/start.cmd` khởi động PHP với `opcache.enable_cli=1`, JIT tracing và bộ đệm JIT 32 MB. Mỗi worker giữ ứng dụng đã biên dịch trong bộ nhớ giữa các request.
+- **Chunk stream lớn hơn** — vòng lặp phát media đọc 256 KB mỗi lần thay vì 8 KB, giảm số lần đọc/flush mỗi luồng.
+- **Trang watch gọn hơn** — `hls.min.js` (~543 KB, ~120 KB khi nén) giờ chỉ được tải trên các trang thực sự phát luồng `.m3u8`, và được phục vụ với `Cache-Control: public, max-age=31536000, immutable` vì đây là dependency vendor đã khóa phiên bản.
+- **Dùng lại dịch vụ** — instance Symfony Validator chỉ tạo một lần và tái sử dụng; logic tài khoản (đăng ký/đăng nhập/xác thực/gửi lại mã) nằm trong một `src/accounts.php` dùng chung cho cả form render phía server và JSON API.
 
 ## Cài đặt nhanh (một lệnh duy nhất)
 
@@ -133,6 +148,7 @@ chờ xác thực.
 - `src/validation.php` — xác thực request bằng `symfony/validator`
 - `src/mailer.php` — gửi email qua PHPMailer bằng SMTP
 - `src/authz.php` — kiểm tra quyền bằng `symfony/security-core` voter (hành động riêng của chủ sở hữu + vai trò `admin`)
+- `src/accounts.php` — dịch vụ tài khoản dùng chung (đăng ký, đăng nhập, xác thực email, gửi lại mã) được dùng cho cả form render phía server và JSON API, để hai bề mặt này không bao giờ lệch nhau
 - `src/render.php` — render trang phía server
 - `src/views/` — các template trang (home, watch, đăng nhập, xác thực, lỗi)
 - `assets/` — file tĩnh: `css/app.css`, `js/app.js`, `js/hls.min.js`, `favicon.svg`

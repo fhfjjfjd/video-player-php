@@ -16,6 +16,17 @@ use Symfony\Component\Validator\Validation;
  */
 
 /**
+ * Cached validator instance — Symfony Validator is heavy to build, reuse it.
+ */
+function app_validator(): Symfony\Component\Validator\Validator\ValidatorInterface {
+    static $validator = null;
+    if ($validator === null) {
+        $validator = Validation::createValidator();
+    }
+    return $validator;
+}
+
+/**
  * Validate an associative array against a set of field constraints.
  *
  * `$constraints` maps a field name to one or more Assert constraints (the
@@ -23,7 +34,7 @@ use Symfony\Component\Validator\Validation;
  * Vietnamese error messages, first violation wins per field; empty when valid.
  */
 function validate_payload(array $data, array $constraints): array {
-    $violations = Validation::createValidator()->validate(
+    $violations = app_validator()->validate(
         $data,
         new Assert\Collection(
             fields: $constraints,

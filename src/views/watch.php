@@ -1,11 +1,14 @@
 <?php /* watch.php — video player page. */
 $src = media_url($row['filename']);
 $isHls = stripos((string)$row['filename'], '.m3u8') !== false || stripos((string)$row['content_type'], 'mpegurl') !== false;
+$loadHls = $isHls;
+$thumb = isset($row['thumbnail_filename']) ? (string)$row['thumbnail_filename'] : '';
 ?>
 <section class="watch">
   <div class="player-shell">
-    <video id="player" class="player" controls preload="metadata"
-           data-src="<?= e($src) ?>" data-hls="<?= $isHls ? '1' : '0' ?>"></video>
+    <video id="player" class="player" controls preload="metadata" playsinline
+           data-src="<?= e($src) ?>" data-hls="<?= $isHls ? '1' : '0' ?>"
+           <?= $thumb !== '' ? 'poster="' . e(media_url($thumb)) . '"' : '' ?>></video>
   </div>
   <div class="watch-info">
     <h1 class="watch-title"><?= e((string)$row['title']) ?></h1>

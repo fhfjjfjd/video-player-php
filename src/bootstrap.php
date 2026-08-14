@@ -48,6 +48,7 @@ require_once __DIR__ . '/crypto.php';
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/authz.php';
+require_once __DIR__ . '/accounts.php';
 
 /* ------------------------------------------------------------------ paths */
 
@@ -149,6 +150,46 @@ function err(string $message): array {
     return ['error' => $message];
 }
 
+/* ------------------------------------------------------------------- gzip */
+
+/**
+ * Does the client advertise gzip in Accept-Encoding?
+ */
+function accept_gzip(): bool {
+    $enc = $_SERVER['HTTP_ACCEPT_ENCODING'] ?? '';
+    if ($enc === '') return false;
+    foreach (explode(',', $enc) as $part) {
+        $part = strtolower(trim(explode(';', $part)[0]));
+        if ($part === 'gzip') return true;
+    }
+    return false;
+}
+
+/**
+ * Is this MIME type worth gzip-compressing? Binary media (video, images,
+ * already-compressed fonts) is left untouched.
+ */
+function mime_is_compressible(string $mime): bool {
+    return str_starts_with($mime, 'text/')
+        || $mime === 'application/javascript'
+        || $mime === 'application/json'
+        || $mime === 'application/xml'
+        || $mime === 'image/svg+xml'
+        || $mime === 'application/wasm';
+}
+
+/**
+ * Wrap the rest of the response in ob_gzhandler. Only started when the client
+ * accepts gzip and the zlib extension exists. ob_gzhandler sets
+ * Content-Encoding/Vary itself; callers must NOT set Content-Length while a
+ * gzip buffer is open (the server falls back to chunked transfer).
+ */
+function begin_gzip(): void {
+    if (!accept_gzip() || !function_exists('ob_gzhandler')) return;
+    header('Vary: Accept-Encoding');
+    ob_start('ob_gzhandler');
+}
+
 function respond_json(int $status, $data): void {
     $body = is_string($data) ? $data : json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if ($body === false) {
@@ -157,7 +198,9 @@ function respond_json(int $status, $data): void {
     }
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
-    header('Content-Length: ' . strlen($body));
+    if (ob_get_level() === 0) {
+        header('Content-Length: ' . strlen($body));
+    }
     echo $body;
 }
 
