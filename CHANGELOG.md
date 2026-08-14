@@ -8,8 +8,10 @@ release workflow is defined in `AGENTS.md`.
 
 ### Added
 
-- AI agent support: `CLAUDE.md` imports `AGENTS.md` for Claude Code; Cline CLI,
-  Codex CLI and OpenCode read `AGENTS.md` directly (single source of truth).
+- AI agent support: `CLAUDE.md` imports `AGENTS.md` for Claude Code;
+  `.agents/rules/general.md` points Google Antigravity (CLI and IDE) at it;
+  Cline CLI, Codex CLI and OpenCode read `AGENTS.md` directly (single source
+  of truth).
 
 ## [1.1.2] - 2026-08-14
 

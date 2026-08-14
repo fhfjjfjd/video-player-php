@@ -171,3 +171,5 @@ nguồn duy nhất:
   Codex CLI và OpenCode đọc trực tiếp.
 - `CLAUDE.md` — import `AGENTS.md` (`@AGENTS.md`) để Claude Code tuân theo cùng
   bộ quy tắc mà không phải trùng lặp.
+- `.agents/rules/general.md` — trỏ Google Antigravity (CLI và IDE) tới
+  `AGENTS.md` để cùng tuân theo bộ quy tắc.

@@ -196,3 +196,5 @@ truth:
   CLI, Codex CLI and OpenCode.
 - `CLAUDE.md` — imports `AGENTS.md` (`@AGENTS.md`) so Claude Code follows the
   same rules without duplicating them.
+- `.agents/rules/general.md` — points Google Antigravity (CLI and IDE) at
+  `AGENTS.md` so it follows the same rules.

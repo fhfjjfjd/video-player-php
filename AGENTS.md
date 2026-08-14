@@ -1237,6 +1237,7 @@ context and every rule must be accurate.
       the file self-contradicting.
 15.6. **Keep the agent rule files in sync.** `AGENTS.md` is read directly by
       Cline CLI, Codex CLI and OpenCode; `CLAUDE.md` (Claude Code) imports
-      `AGENTS.md` via `@AGENTS.md` so all four tools share one source of
-      truth. Never duplicate rules into `CLAUDE.md`; Claude-specific
-      instructions go below the import there, never in `AGENTS.md`.
+      `AGENTS.md` via `@AGENTS.md`, and `.agents/rules/general.md` points
+      Antigravity (CLI and IDE) at it, so all tools share one source of truth.
+      Never duplicate rules into `CLAUDE.md`; Claude-specific instructions go
+      below the import there, never in `AGENTS.md`.

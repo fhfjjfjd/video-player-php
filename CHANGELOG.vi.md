@@ -8,8 +8,10 @@ phát hành được định nghĩa trong `AGENTS.md`.
 
 ### Thêm mới
 
-- Hỗ trợ tác nhân AI: `CLAUDE.md` import `AGENTS.md` cho Claude Code; Cline CLI,
-  Codex CLI và OpenCode đọc thẳng `AGENTS.md` (một nguồn quy tắc duy nhất).
+- Hỗ trợ tác nhân AI: `CLAUDE.md` import `AGENTS.md` cho Claude Code;
+  `.agents/rules/general.md` trỏ Google Antigravity (CLI và IDE) tới nó;
+  Cline CLI, Codex CLI và OpenCode đọc thẳng `AGENTS.md` (một nguồn quy tắc
+  duy nhất).
 
 ## [1.1.2] - 2026-08-14
 
