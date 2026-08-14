@@ -33,7 +33,7 @@ skip the syntax check and tests entirely and just publish as normal.
   process; follow it exactly).
 - **Section 3** — absolute rules that apply at all times (never-broken
   invariants).
-- **Section 4** — how to use subagents (tác nhân) in this workflow.
+- **Section 4** — subagents are optional helpers; the workflow never depends on them.
 - **Section 5** — feedback / GitHub Issues handling.
 - **Section 6** — rollback and data safety.
 - **Section 7** — the changelog.
@@ -46,8 +46,7 @@ skip the syntax check and tests entirely and just publish as normal.
 - **Section 14** — incident response.
 - **Section 15** — maintaining this file (AGENTS.md policy).
 
-Use **Section 2** as your checklist. Whenever the guide says "delegate to a
-subagent", follow the instructions in **Section 4** first.
+Use **Section 2** as your checklist.
 
 ---
 
@@ -72,7 +71,7 @@ subagent", follow the instructions in **Section 4** first.
   but that language already ships in the repo, create it.
 - **The changelog is part of the doc set.** Behavior, command, config, or
   stack changes MUST also update `CHANGELOG.md` (and its mirrors) in the same
-  commit (see Section 4.1 and Section 7).
+  commit (see Phase 4.1 and Section 7).
 
 ---
 
@@ -125,9 +124,8 @@ complete them on their own deadlines.
      Phase 5 to pick a correct version bump.
 
 0.4. **Inventory the affected code.** If the task touches more than one file,
-     delegate to an `explore` subagent to produce a concise map of what was
-     changed, what calls what, and what could break (see Section 4.1). This
-     map becomes the input to Phase 1.
+     produce a concise map yourself of what was changed, what calls what, and
+     what could break. This map becomes the input to Phase 1.
 
 ### Phase 1 — Change analysis and planning
 
@@ -232,9 +230,9 @@ complete them on their own deadlines.
      `ls README*.md CHANGELOG*.md` (or `glob "*.md"`) and update each one.
      Never leave a mirror stale.
 
-4.3. If multiple translations are needed and the change is large, delegate the
-     translation of each mirror to a `general` subagent (one per language),
-     then review the results yourself before committing.
+4.3. If multiple translations are needed and the change is large, write each
+     mirror yourself in its own language (one language per file, never
+     interleaved), then review the results yourself before committing.
 
 4.4. Keep every doc file in a single language. Never interleave languages.
 
@@ -280,13 +278,13 @@ complete them on their own deadlines.
 6.3. Stage with `git add -A`, then review the staged set with
      `git diff --cached --stat` and confirm only intended files are present.
 
-6.4. **Independent code review for non-trivial changes.** If the change is
-     more than a trivial docs/version edit, delegate a review to a `review`
-     subagent (Section 4.3) BEFORE committing. Give it the staged diff
-     (`git diff --cached`) and the Phase 3 checklist; it reports bugs, security
-     findings, missing docs/changelog sync, and style issues. Fix its findings
-     and re-stage. The `review` subagent never decides the release — that
-     stays with you / the user.
+6.4. **Self-review the staged diff before committing.** If the change is more
+     than a trivial docs/version edit, review the staged diff
+     (`git diff --cached`) yourself against the Phase 3 checklist, the coding
+     standards (Section 8) and the definition of done (Section 10); look for
+     bugs, security findings, missing docs/changelog sync, and style issues.
+     Fix any findings and re-stage. The final go/no-go stays with you / the
+     user.
 
 6.5. Commit with a concise message matching the repo style, using one of these
      prefixes: `Add:`, `Fix:`, `Change:`, `Remove:`, `Docs:`.
@@ -667,111 +665,26 @@ actions — back into Phase 0 so nothing is dropped.
 
 ---
 
-## 4. Using subagents (tác nhân) in this workflow
+## 4. Subagents are optional helpers (never required)
 
-Subagents help reduce context usage and parallelize work. Use them for
-research and verification, NEVER for making final decisions.
+The workflow NEVER depends on subagents (tác nhân phụ). Every phase — from
+Phase 0 intake through Phase 19 triage — is performed directly by the main
+agent, with no delegation step that can block progress. Subagents, if the
+current tool happens to provide them, may be used as OPTIONAL helpers for
+research or verification only. When they are used, these rules still apply:
 
-4.1. **`explore` subagent** — for fast codebase searches and summaries. Use in
-     Phase 0.4 to map affected code, and anytime you need to find files or
-     symbols quickly. Specify a thoroughness level (`quick` / `medium` /
-     `very thorough`) so it knows how deep to go.
-
-4.2. **`general` subagent** — for multi-step analysis and parallelizable
-     work. Use in Phase 4.3 (translations) and for an independent review of a
-     non-trivial change before committing.
-
-4.3. **`review` subagent** — independent code review of the staged diff before
-     it is committed (Phase 6.4). Give it the exact staged diff
-     (`git diff --cached`) and the repo conventions; ask for a structured
-     report (bugs, security findings, missing docs/changelog sync, style
-     issues). Research and verification ONLY — it never makes the final
-     release decision.
-
-4.4. **Delegation prompt contract (mandatory).** A subagent starts with a
-     fresh, isolated context window — the ONLY channel from you to it is the
-     prompt text. Every delegation prompt MUST contain all of the following:
-     - **Task**: the one thing to do, with exact file paths and commands.
-     - **Boundary**: what it MUST NOT touch — no other files, no `git`
-       operations, no releases, no package installs. State the negatives
-       explicitly; a subagent does not infer limits you did not write.
-     - **Input**: the exact files, snippets, and data it needs (paths it is
-       allowed to read).
-     - **Output contract**: EXACTLY what to return and in what format
-       (structured report, findings list, translated text). A fixed output
-       shape beats a long prose description.
-     - **Done when**: a verifiable success condition (e.g. "quote the `php -l`
-       output for every file you checked").
-     - **Mode**: code changes expected, or research/verification only.
-     If any of these is missing, the prompt is not ready — fix it first.
-     Never delegate with vague instructions such as "look into this".
-
-4.5. **Parallelization rules.**
-     - Only parallelize tasks that are TRULY independent and touch DIFFERENT
-       files. Two subagents editing the same file will silently clobber each
-       other (last-write-wins); if the slices share a file, run them
-       sequentially.
-     - Launch independent subagents in a single message (one message, multiple
-       tool calls) so they genuinely run in parallel.
-     - Cap parallelism at 3 concurrent subagents. More rarely helps and always
-       costs more tokens and coordination.
-     - Dependent work runs sequentially: if task B needs task A's output, run
-       A first, then B. Never "parallelize" a dependency chain.
-     - For many parallel slices, use the aggregator pattern: spawn N
-       subagents, wait for ALL results, then synthesize a single summary
-       yourself instead of juggling N raw reports in the main thread.
-
-4.6. **Verify every subagent result (never trust blindly).** A subagent's
-     final message is a CLAIM, not a fact. Before relying on it:
-     - If it says it wrote a file, read that file (or `git diff`) and confirm
-       it really exists and says what was claimed.
-     - If it says a command passed, re-run the critical command yourself or
-       inspect its captured output.
-     - If it reports findings, check at least the highest-severity ones
-       against the actual code.
-     - If its report is missing, incomplete, or contradicts your own reading
-       of the repo, do NOT proceed — send it back with the gap stated
-       explicitly, or re-do the work yourself.
-     - `explore` and `review` outputs are advisory: you integrate them, you
-       make the decision.
-
-4.7. **Scope and least privilege.** A subagent can only be as safe as the
-     tools you give it. Never grant a subagent a capability the task does not
-     need:
-     - `explore` and `review` are read-only research: they must never edit
-       files, never stage/commit, never run release commands.
-     - A subagent that writes code must still NOT run `git commit`, `git push`,
-       `git tag`, or any `gh release` / `gh issue close` command — those stay
-       in the main thread, done by you.
-     - Never let a subagent install packages, modify `composer.json` /
-       `composer.lock`, or touch `vendor/` without explicit instruction in its
-       prompt.
-
-4.8. **Failure handling.** Subagents fail; the workflow must not.
-     - If a subagent reports an error, times out, or returns unusable output,
-       retry ONCE with a tighter, more specific prompt, then take over the task
-       yourself. Never silently accept a half-done result and never quietly
-       drop the task.
-     - If it overstepped its boundary (edited a file it should not have, ran a
-       forbidden command), STOP and inspect `git status` / `git diff` before
-       anything else; revert any unintended change, then continue.
-     - Never let a failure cascade into a release decision. A subagent that
-       "found no issues" is not approval to release — the go/no-go stays with
-       you and the user.
-
-4.9. **Trust boundaries (transitive trust).** A subagent runs with your
-     context and, indirectly, your authority — treat delegation like a
-     security boundary:
-     - Never delegate anything you could not undo if the subagent got it
-       wrong.
-     - Never chain subagents through each other for release/commit work; the
-       main thread is the only place those actions happen.
-     - For untrusted external content (web pages, user files), prefer a
-       read-only subagent that summarizes and never acts — this breaks any
-       prompt-injection chain before it can touch the repo.
-     - **Never delegate a phase decision** (version choice, release go/no-go,
-       whether to close an issue, whether a finding blocks a release). Those
-       stay with you / the user.
+- The workflow must remain fully executable without any subagent; never
+  reorder, gate, or skip a phase because one is unavailable.
+- Verify every subagent result yourself before relying on it: re-read files it
+  claims to have written, re-run critical commands, and check the
+  highest-severity findings against the code. Its output is a claim, not a
+  fact.
+- Never delegate a final decision — version choice, release go/no-go, whether
+  to close an issue, whether a finding blocks a release. Those stay with you /
+  the user.
+- A subagent that writes code must still NOT run `git commit`, `git push`,
+  `git tag`, or any `gh release` / `gh issue close` command; those stay in the
+  main thread, done by you.
 
 ---
 
@@ -1118,8 +1031,8 @@ Phase 6 (commit):
    the start scripts are in sync.
 9. No `data.db*`, `uploads/`, `cache/`, `node_modules/`, `.opencode/` or
    secret files are staged.
-10. The `review` subagent (for non-trivial changes) reported no open
-    blockers, and you verified its claims (Section 4.6).
+10. The Phase 6.4 self-review of the staged diff was completed for
+    non-trivial changes and found no open blockers.
 11. Commit message uses a repo prefix (`Add:` / `Fix:` / `Change:` /
     `Remove:` / `Docs:`).
 12. If dependencies changed, `composer audit` is clean (when Composer

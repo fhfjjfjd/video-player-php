@@ -13,6 +13,12 @@ phát hành được định nghĩa trong `AGENTS.md`.
   Cline CLI, Codex CLI và OpenCode đọc thẳng `AGENTS.md` (một nguồn quy tắc
   duy nhất).
 
+### Thay đổi
+
+- Quy trình phát hành trong `AGENTS.md` không còn phụ thuộc vào tác nhân phụ
+  (subagent): mọi giai đoạn do tác nhân chính thực hiện trực tiếp, và tác nhân
+  phụ nhiều nhất chỉ là trợ giúp tùy chọn cho nghiên cứu hoặc xác minh.
+
 ## [1.1.2] - 2026-08-14
 
 ### Thay đổi

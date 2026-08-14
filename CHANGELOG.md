@@ -13,6 +13,12 @@ release workflow is defined in `AGENTS.md`.
   Cline CLI, Codex CLI and OpenCode read `AGENTS.md` directly (single source
   of truth).
 
+### Changed
+
+- The `AGENTS.md` release workflow no longer depends on subagents (tác nhân
+  phụ): every phase is executed directly by the main agent, and subagents are
+  at most optional helpers for research or verification.
+
 ## [1.1.2] - 2026-08-14
 
 ### Changed
