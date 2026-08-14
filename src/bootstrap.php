@@ -36,6 +36,7 @@ const RATE_LIMIT_ROUTES = [
     'list_videos'       => [0, 60],
     'upload_video'      => [5, 60],
     'delete_video'      => [30, 60],
+    'hide_video'        => [30, 60],
     'media'             => [1200, 60],       // generous — player issues many Range requests
     'home'              => [0, 60],
     'watch'             => [0, 60],

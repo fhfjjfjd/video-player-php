@@ -100,6 +100,23 @@ function db_init(PDO $pdo): void {
         $pdo->exec('PRAGMA user_version = 1');
     }
 
+    // v2: per-video visibility — hidden videos leave the public library but
+    // stay visible to their owner on the "my videos" page.
+    if ($version < 2) {
+        $vidCols = $pdo->query('PRAGMA table_info(videos)')->fetchAll(PDO::FETCH_ASSOC);
+        $hasHidden = false;
+        foreach ($vidCols as $c) {
+            if (strtolower((string)$c['name']) === 'is_hidden') {
+                $hasHidden = true;
+                break;
+            }
+        }
+        if (!$hasHidden) {
+            $pdo->exec('ALTER TABLE videos ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0');
+        }
+        $pdo->exec('PRAGMA user_version = 2');
+    }
+
     // Query-plan indexes for the hottest read and write paths.
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_videos_created_at ON videos(created_at, id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_videos_user_id ON videos(user_id)');
@@ -258,38 +275,59 @@ function create_video(int $userId, string $title, string $filename, int $size, s
 
 function list_all_videos(string $query): array {
     if ($query !== '') {
-        $st = db()->prepare("SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at FROM videos WHERE title LIKE '%' || ? || '%' ESCAPE '\\' ORDER BY created_at DESC, id DESC");
+        $st = db()->prepare("SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at, is_hidden FROM videos WHERE is_hidden = 0 AND title LIKE '%' || ? || '%' ESCAPE '\\' ORDER BY created_at DESC, id DESC");
         $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $query);
         $st->execute([$escaped]);
     } else {
-        $st = db()->query('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at FROM videos ORDER BY created_at DESC, id DESC');
+        $st = db()->query('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at, is_hidden FROM videos WHERE is_hidden = 0 ORDER BY created_at DESC, id DESC');
     }
     return $st->fetchAll(PDO::FETCH_ASSOC);
 }
 
+/** All of a user's videos (hidden included) for the "my videos" page. */
+function list_videos_by_user(int $userId): array {
+    $st = db()->prepare('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at, is_hidden FROM videos WHERE user_id = ? ORDER BY created_at DESC, id DESC');
+    $st->execute([$userId]);
+    return $st->fetchAll(PDO::FETCH_ASSOC);
+}
+
 function find_video_by_id(int $id): ?array {
-    $st = db()->prepare('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at FROM videos WHERE id = ?');
+    $st = db()->prepare('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at, is_hidden FROM videos WHERE id = ?');
     $st->execute([$id]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     return $row === false ? null : $row;
 }
 
 function find_video_by_id_and_user(int $id, int $userId): ?array {
-    $st = db()->prepare('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at FROM videos WHERE id = ? AND user_id = ?');
+    $st = db()->prepare('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at, is_hidden FROM videos WHERE id = ? AND user_id = ?');
     $st->execute([$id, $userId]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     return $row === false ? null : $row;
 }
 
 function find_video_by_filename(string $filename): ?array {
-    $st = db()->prepare('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at FROM videos WHERE filename = ?');
+    $st = db()->prepare('SELECT id, user_id, title, filename, size, content_type, thumbnail_filename, created_at, is_hidden FROM videos WHERE filename = ?');
     $st->execute([$filename]);
     $row = $st->fetch(PDO::FETCH_ASSOC);
     return $row === false ? null : $row;
 }
 
+function set_video_hidden(int $id, bool $hidden): void {
+    $st = db()->prepare('UPDATE videos SET is_hidden = ? WHERE id = ?');
+    $st->execute([$hidden ? 1 : 0, $id]);
+    clear_video_list_cache();
+}
+
 function delete_video(int $id): void {
+    $row = find_video_by_id($id);
     $st = db()->prepare('DELETE FROM videos WHERE id = ?');
     $st->execute([$id]);
+    if ($row !== null) {
+        @unlink(upload_dir() . '/' . (string)$row['filename']);
+        $thumb = (string)($row['thumbnail_filename'] ?? '');
+        if ($thumb !== '') {
+            @unlink(upload_dir() . '/' . $thumb);
+        }
+    }
     clear_video_list_cache();
 }

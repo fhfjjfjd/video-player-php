@@ -6,8 +6,20 @@ release workflow is defined in `AGENTS.md`.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-14
+
 ### Added
 
+- Dedicated upload page (`/upload`) and a "My videos" management page
+  (`/my-videos`): uploading no longer lives in a modal on the home page; on
+  "My videos" you can delete, hide or show your own uploads.
+- Hide videos: a hidden video leaves the public library (home page, search and
+  JSON API) for everyone, stays visible to its owner on the "My videos" page,
+  and can be shown again at any time. Non-owners get a 404 on the watch page,
+  the API and media streaming (`videos.is_hidden`, additive migration to
+  `PRAGMA user_version = 2`).
+- Hide/unhide is owner-only like delete, enforced by `VideoVoter::HIDE` (the
+  `admin` role can act on any video).
 - AI agent support: `CLAUDE.md` imports `AGENTS.md` for Claude Code;
   `.agents/rules/general.md` points Google Antigravity (CLI and IDE) at it;
   Cline CLI, Codex CLI and OpenCode read `AGENTS.md` directly (single source
@@ -15,9 +27,14 @@ release workflow is defined in `AGENTS.md`.
 
 ### Changed
 
-- The `AGENTS.md` release workflow no longer depends on subagents (tác nhân
-  phụ): every phase is executed directly by the main agent, and subagents are
-  at most optional helpers for research or verification.
+- The `AGENTS.md` release workflow no longer depends on subagents: every phase
+  is executed directly by the main agent, and subagents are at most optional
+  helpers for research or verification.
+
+### Fixed
+
+- Deleting a video now removes the stored file(s) from `uploads/` together
+  with the database row — no orphaned files are left behind.
 
 ## [1.1.2] - 2026-08-14
 

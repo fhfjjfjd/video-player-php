@@ -19,7 +19,8 @@
     <nav class="nav-links">
       <a href="/" class="nav-link<?= $active === 'home' ? ' active' : '' ?>">Trang chủ</a>
       <?php if ($user !== null): ?>
-        <button type="button" class="nav-link btn-ghost" id="open-upload">Tải lên</button>
+        <a href="/upload" class="nav-link<?= $active === 'upload' ? ' active' : '' ?>">Tải lên</a>
+        <a href="/my-videos" class="nav-link<?= $active === 'my-videos' ? ' active' : '' ?>">Video của tôi</a>
         <span class="nav-user"><?= e((string)$user['username']) ?></span>
         <form method="post" action="/logout" class="inline-form">
           <button type="submit" class="nav-link btn-ghost">Đăng xuất</button>

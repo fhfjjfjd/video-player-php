@@ -73,9 +73,10 @@ function authz_can(int $userId, array $roles, string $attribute, mixed $subject 
 final class VideoVoter extends Voter {
     public const DELETE = 'video.delete';
     public const EDIT   = 'video.edit';
+    public const HIDE   = 'video.hide';
 
     protected function supports(string $attribute, mixed $subject): bool {
-        return in_array($attribute, [self::DELETE, self::EDIT], true);
+        return in_array($attribute, [self::DELETE, self::EDIT, self::HIDE], true);
     }
 
     protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token): bool {

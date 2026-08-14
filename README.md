@@ -12,9 +12,11 @@ database to install.
 
 - Watch videos publicly without logging in
 - Register / log in to upload videos and manage your own uploads (registration requires a Gmail address — the email must end in `@gmail.com`; login accepts your Gmail or username)
+- Dedicated upload page (`/upload`) and a "My videos" management page (`/my-videos`) — uploading no longer lives in a modal on the home page; on "My videos" you can delete, hide or show your own uploads
+- Hide a video to remove it from the public library: it disappears from the home page, search and the JSON API for everyone, stays visible to its owner (and admins) on the "My videos" page, and can be shown again any time. Non-owners get a 404 on the watch page, the API and media streaming
+- Only the owner can delete, hide or unhide a video — authorization is enforced by the Symfony Security component (voters + access decision manager), and accounts marked `admin` in the database (`users.role`) can act on any video
 - Email verification on registration: registering sends a 6-digit verification code to the Gmail address, which must be entered on the confirmation screen before the account is created (codes expire after 10 minutes, resend supported)
 - Existing accounts that were never verified must verify their email when logging in
-- Only the owner can delete a video — authorization is enforced by the Symfony Security component (voters + access decision manager), and accounts marked `admin` in the database (`users.role`) can delete any video
 - Video thumbnails: automatic extraction with FFmpeg on upload, or a custom image
 - Responsive dark streaming-style UI with a cinematic emerald → teal → cyan gradient brand
 - Every video has its own shareable URL (`/video/:id`)
@@ -26,7 +28,7 @@ database to install.
 - Full-featured player (native video element + hls.js for HLS `.m3u8` streams)
 - The "Góp ý" button links to the GitHub Issues page; the "Nguồn" button links to this repository
 - Compressed responses: HTML pages, JSON API and text-based static assets are served gzip-compressed (`Vary: Accept-Encoding`); media streams are always served raw so Range requests and seeking stay fast
-- Shared video-library cache: the home page and the API read the video list from a short-lived shared cache (10 s) instead of re-querying SQLite on every request — invalidated immediately on upload and delete
+- Shared video-library cache: the home page and the API read the video list from a short-lived shared cache (10 s) instead of re-querying SQLite on every request — invalidated immediately on upload, delete, hide and unhide
 - Tuned SQLite: WAL journal + `synchronous=NORMAL` + in-memory temp tables, query-plan indexes, and one-time migrations tracked via `PRAGMA user_version` (no per-connection schema scans)
 - OPcache with JIT enabled by default: the start scripts launch PHP with bytecode caching and tracing JIT so repeated requests avoid recompiling the app
 - The vendored `hls.min.js` is only loaded on watch pages that actually play HLS streams, and is cached by browsers for a year
@@ -179,7 +181,7 @@ registration is pending.
   verification, code resend) used by both the server-rendered forms and the
   JSON API, so the two surfaces can never drift apart
 - `src/render.php` — server-side page rendering
-- `src/views/` — the page templates (home, watch, auth, verify, error)
+- `src/views/` — the page templates (home, watch, upload, my-videos, auth, verify, error)
 - `assets/` — static files: `css/app.css`, `js/app.js`, `js/hls.min.js`, `favicon.svg`
 - `scripts/install.sh` / `scripts/install.bat` — one-command installers
 - `scripts/start.sh` / `scripts/start.cmd` — start the app via `php -S`

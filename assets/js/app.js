@@ -21,38 +21,7 @@
     });
   });
 
-  /* ----------------------------------------------------- upload modal */
-
-  var modal = $("#upload-modal");
-  var openBtn = $("#open-upload");
-  var closeBtn = $("#close-upload");
-
-  function openModal() {
-    if (!modal) return;
-    modal.hidden = false;
-    var input = $("#upload-file");
-    if (input) input.focus();
-  }
-
-  function closeModal() {
-    if (!modal) return;
-    modal.hidden = true;
-  }
-
-  if (openBtn) openBtn.addEventListener("click", openModal);
-  if (closeBtn) closeBtn.addEventListener("click", closeModal);
-
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") closeModal();
-  });
-
-  if (modal) {
-    modal.addEventListener("click", function (e) {
-      if (e.target === modal) closeModal();
-    });
-  }
-
-  /* ------------------------------------------------------ upload form */
+  /* -------------------------------------------------------- upload form */
 
   var uploadForm = $("#upload-form");
 
@@ -105,7 +74,7 @@
 
       xhr.addEventListener("load", function () {
         if (xhr.status >= 200 && xhr.status < 300) {
-          window.location.href = "/?ok=" + encodeURIComponent("Đã tải video lên.");
+          window.location.href = "/my-videos?ok=" + encodeURIComponent("Đã tải video lên.");
         } else {
           var msg = "Không thể tải video lên. Vui lòng thử lại.";
           try {

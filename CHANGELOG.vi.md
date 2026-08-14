@@ -6,8 +6,20 @@ phát hành được định nghĩa trong `AGENTS.md`.
 
 ## [Chưa phát hành]
 
+## [1.2.0] - 2026-08-14
+
 ### Thêm mới
 
+- Trang tải video riêng (`/upload`) và trang quản lý "Video của tôi"
+  (`/my-videos`): việc tải lên không còn nằm trong cửa sổ modal trên trang
+  chủ; trên "Video của tôi" bạn có thể xóa, ẩn hoặc hiện video của mình.
+- Tính năng ẩn video: video ẩn rời khỏi thư viện công khai (trang chủ, tìm
+  kiếm và JSON API) với mọi người, vẫn hiển thị với chủ sở hữu trên trang
+  "Video của tôi", và có thể hiện lại bất cứ lúc nào. Người không phải chủ sở
+  hữu nhận mã lỗi 404 ở trang xem, API và cả luồng media
+  (`videos.is_hidden`, migration cộng dồn lên `PRAGMA user_version = 2`).
+- Ẩn/hiện chỉ dành cho chủ sở hữu giống như xóa, được kiểm tra bằng
+  `VideoVoter::HIDE` (vai trò `admin` có thể thao tác trên mọi video).
 - Hỗ trợ tác nhân AI: `CLAUDE.md` import `AGENTS.md` cho Claude Code;
   `.agents/rules/general.md` trỏ Google Antigravity (CLI và IDE) tới nó;
   Cline CLI, Codex CLI và OpenCode đọc thẳng `AGENTS.md` (một nguồn quy tắc
@@ -18,6 +30,11 @@ phát hành được định nghĩa trong `AGENTS.md`.
 - Quy trình phát hành trong `AGENTS.md` không còn phụ thuộc vào tác nhân phụ
   (subagent): mọi giai đoạn do tác nhân chính thực hiện trực tiếp, và tác nhân
   phụ nhiều nhất chỉ là trợ giúp tùy chọn cho nghiên cứu hoặc xác minh.
+
+### Sửa lỗi
+
+- Xóa video giờ xóa luôn file đã lưu trong `uploads/` cùng với dòng dữ liệu
+  trong database — không để lại file mồ côi.
 
 ## [1.1.2] - 2026-08-14
 

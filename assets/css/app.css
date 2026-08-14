@@ -444,61 +444,6 @@ input::placeholder {
 
 /* ------------------------------------------------------------- upload */
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
-.modal-backdrop[hidden] {
-  display: none;
-}
-
-.modal {
-  width: 100%;
-  max-width: 460px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: 0 40px 100px -30px rgba(0, 0, 0, 0.7);
-  max-height: 90vh;
-  overflow: auto;
-}
-
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.modal-head h2 {
-  margin: 0;
-  font-size: 20px;
-  letter-spacing: -0.02em;
-}
-
-.modal-close {
-  border: none;
-  background: none;
-  color: var(--text-mute);
-  font-size: 28px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
-}
-
-.modal-close:hover {
-  color: var(--text);
-}
-
 .upload-progress {
   margin: 14px 0;
 }
@@ -534,6 +479,51 @@ input::placeholder {
 
 .form-status.error {
   color: #fca5a5;
+}
+
+/* ---------------------------------------------------------- my videos */
+
+.upload-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.6);
+}
+
+.muted {
+  color: var(--text-mute);
+  margin: 0;
+}
+
+.my-videos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.video-card.is-hidden {
+  opacity: 0.72;
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.video-card.is-hidden:hover {
+  opacity: 1;
+}
+
+.video-card-badge.badge-hidden {
+  background: rgba(51, 30, 3, 0.85);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fcd34d;
+}
+
+.my-videos-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
 }
 
 /* -------------------------------------------------------------- watch */
@@ -575,6 +565,16 @@ input::placeholder {
   margin: 0;
 }
 
+.watch-hidden-note {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: #fcd34d;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
 /* ------------------------------------------------------------- error */
 
 .error {
@@ -613,6 +613,11 @@ input::placeholder {
   }
 
   .video-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 14px;
+  }
+
+  .my-videos {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 14px;
   }

@@ -60,6 +60,20 @@ if ($method === 'GET') {
     } elseif ($path === '/verify') {
         rate_limit_apply('pages');
         render_page('Xác thực email', 'verify');
+    } elseif ($path === '/upload') {
+        rate_limit_apply('pages');
+        $uid = current_user_id();
+        if ($uid <= 0) {
+            redirect('/login?error=' . urlencode('Vui lòng đăng nhập để tải video lên.'));
+        }
+        render_page('Tải video lên', 'upload', ['active' => 'upload']);
+    } elseif ($path === '/my-videos') {
+        rate_limit_apply('pages');
+        $uid = current_user_id();
+        if ($uid <= 0) {
+            redirect('/login?error=' . urlencode('Vui lòng đăng nhập để quản lý video của bạn.'));
+        }
+        render_page('Video của tôi', 'my-videos', ['myVideos' => list_videos_by_user($uid), 'active' => 'my-videos']);
     } elseif (preg_match('#^/video/([0-9]+)$#', $path, $m)) {
         rate_limit_apply('watch');
         show_watch_page((int)$m[1]);
@@ -77,8 +91,14 @@ if ($method === 'GET') {
         submit_resend();
     } elseif ($path === '/logout') {
         submit_logout();
+    } elseif ($path === '/upload') {
+        submit_upload();
     } elseif (preg_match('#^/video/([0-9]+)/delete$#', $path, $m)) {
         submit_delete_video((int)$m[1]);
+    } elseif (preg_match('#^/video/([0-9]+)/hide$#', $path, $m)) {
+        submit_set_hidden((int)$m[1], true);
+    } elseif (preg_match('#^/video/([0-9]+)/unhide$#', $path, $m)) {
+        submit_set_hidden((int)$m[1], false);
     } else {
         render_error_page(404, 'Trang không tồn tại.');
     }
@@ -136,8 +156,13 @@ function show_watch_page(int $id): void {
         return;
     }
     $uid = current_user_id();
-    $owner = find_user_by_id((int)$row['user_id']);
     $user = $uid > 0 ? find_user_by_id($uid) : null;
+    if ((int)($row['is_hidden'] ?? 0) === 1
+        && !can($uid, $uid > 0 ? authz_roles_for($user) : ['ROLE_USER'], VideoVoter::HIDE, $row)) {
+        render_error_page(404, 'Video không tồn tại.');
+        return;
+    }
+    $owner = find_user_by_id((int)$row['user_id']);
     $canDelete = $uid > 0
         && can($uid, authz_roles_for($user), VideoVoter::DELETE, $row);
     render_page((string)$row['title'], 'watch', [
@@ -250,6 +275,41 @@ function submit_delete_video(int $id): void {
     }
     delete_video($id);
     redirect('/?ok=' . urlencode('Đã xóa video.'));
+}
+
+function submit_upload(): void {
+    rate_limit_apply('upload_video');
+    $uid = current_user_id();
+    if ($uid <= 0) {
+        redirect('/login?error=' . urlencode('Vui lòng đăng nhập để tải video lên.'));
+    }
+    $title  = isset($_POST['title']) ? trim((string)$_POST['title']) : '';
+    $result = process_upload($_FILES['video'] ?? null, $title, $_FILES['thumbnail'] ?? null);
+    if (isset($result['error'])) {
+        redirect('/upload?error=' . urlencode($result['error']));
+    }
+    redirect('/my-videos?ok=' . urlencode('Đã tải video lên.'));
+}
+
+function submit_set_hidden(int $id, bool $hidden): void {
+    rate_limit_apply('hide_video');
+    $uid = current_user_id();
+    if ($uid <= 0) {
+        redirect('/login?error=' . urlencode('Vui lòng đăng nhập để quản lý video.'));
+    }
+    $row = find_video_by_id($id);
+    if ($row === null) {
+        render_error_page(404, 'Video không tồn tại.');
+        return;
+    }
+    $user = find_user_by_id($uid);
+    if (!can($uid, authz_roles_for($user), VideoVoter::HIDE, $row)) {
+        redirect('/my-videos?error=' . urlencode('Bạn không có quyền thay đổi video này.'));
+    }
+    if ((int)($row['is_hidden'] ?? 0) !== ($hidden ? 1 : 0)) {
+        set_video_hidden($id, $hidden);
+    }
+    redirect('/my-videos?ok=' . urlencode($hidden ? 'Đã ẩn video.' : 'Đã hiện video.'));
 }
 
 /* ------------------------------------------------------------------- API */
@@ -442,6 +502,12 @@ function handle_get_video(int $id): void {
         return;
     }
     $uid = current_user_id();
+    $viewer = $uid > 0 ? find_user_by_id($uid) : null;
+    if ((int)($row['is_hidden'] ?? 0) === 1
+        && !can($uid, $uid > 0 ? authz_roles_for($viewer) : ['ROLE_USER'], VideoVoter::HIDE, $row)) {
+        respond_json(404, err('Video không tồn tại.'));
+        return;
+    }
     respond_json(200, ['video' => video_json($row, $uid > 0 ? $uid : null, load_media_secret())]);
 }
 
@@ -484,28 +550,43 @@ function handle_upload_video(): void {
         return;
     }
 
-    $video = $_FILES['video'] ?? $_FILES['file'] ?? null;
+    $title  = isset($_POST['title']) ? trim((string)$_POST['title']) : '';
+    $result = process_upload($_FILES['video'] ?? $_FILES['file'] ?? null, $title, $_FILES['thumbnail'] ?? null);
+    if (isset($result['error'])) {
+        respond_json($result['status'] ?? 400, err($result['error']));
+        return;
+    }
+    respond_json(201, ['video' => video_json($result['video'], $uid, load_media_secret())]);
+}
+
+/**
+ * Shared upload logic for the JSON API (/api/videos POST) and the
+ * server-rendered form (/upload POST): validate the file, store it under a
+ * random name, extract/generate a thumbnail and insert the videos row.
+ *
+ * @param array|null $video The $_FILES['video'] entry.
+ * @param string     $title The trimmed title (falls back to the filename).
+ * @param array|null $thumb The $_FILES['thumbnail'] entry, if any.
+ * @return array ['ok' => true, 'video' => $row] or ['error' => string, 'status' => int].
+ */
+function process_upload(?array $video, string $title, ?array $thumb): array {
     if (!is_array($video)
         || ($video['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
         || (int)($video['size'] ?? 0) <= 0) {
-        respond_json(400, err('Thiếu file video trong request.'));
-        return;
+        return ['error' => 'Thiếu file video trong request.', 'status' => 400];
     }
 
     $size = (int)$video['size'];
     if ($size > MAX_UPLOAD_SIZE) {
-        respond_json(400, err('File vượt quá giới hạn 1GB.'));
-        return;
+        return ['error' => 'File vượt quá giới hạn 1GB.', 'status' => 400];
     }
 
     $videoContentType = isset($video['type']) && is_string($video['type']) ? $video['type'] : 'video/mp4';
     if (strpos($videoContentType, 'video/') !== 0) {
-        respond_json(400, err('File không phải là video.'));
-        return;
+        return ['error' => 'File không phải là video.', 'status' => 400];
     }
 
     $origName = isset($video['name']) && is_string($video['name']) ? $video['name'] : '';
-    $title = isset($_POST['title']) ? trim((string)$_POST['title']) : '';
     if ($title === '') {
         $title = $origName !== '' ? $origName : 'Video';
     }
@@ -521,12 +602,10 @@ function handle_upload_video(): void {
     $stored    = generate_uuid() . '.' . $ext;
     $finalPath = $upload . '/' . $stored;
     if (!move_uploaded_file($video['tmp_name'], $finalPath)) {
-        respond_json(500, err('Failed to store video'));
-        return;
+        return ['error' => 'Failed to store video', 'status' => 500];
     }
 
     $thumbStored = null;
-    $thumb = $_FILES['thumbnail'] ?? null;
     if (is_array($thumb)
         && ($thumb['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK
         && (int)($thumb['size'] ?? 0) > 0) {
@@ -550,20 +629,20 @@ function handle_upload_video(): void {
         }
     }
 
+    $uid = current_user_id();
     $videoId = create_video($uid, $title, $stored, $size, $videoContentType, $thumbStored);
     if ($videoId === null) {
         @unlink($finalPath);
         if ($thumbStored !== null) @unlink($upload . '/' . $thumbStored);
-        respond_json(500, err('Failed to create video'));
-        return;
+        return ['error' => 'Failed to create video', 'status' => 500];
     }
 
     $row = find_video_by_id($videoId) ?? [
         'id' => $videoId, 'user_id' => $uid, 'title' => $title, 'filename' => $stored,
         'size' => $size, 'content_type' => $videoContentType, 'thumbnail_filename' => $thumbStored ?? '',
-        'created_at' => 'now',
+        'created_at' => 'now', 'is_hidden' => 0,
     ];
-    respond_json(201, ['video' => video_json($row, $uid, load_media_secret())]);
+    return ['ok' => true, 'video' => $row];
 }
 
 function handle_media(): void {
@@ -584,6 +663,16 @@ function handle_media(): void {
     if (!is_file($path)) {
         respond_json(404, err('Not Found'));
         return;
+    }
+
+    $row = find_video_by_filename($filename);
+    if ($row !== null && (int)($row['is_hidden'] ?? 0) === 1) {
+        $uid = current_user_id();
+        $viewer = $uid > 0 ? find_user_by_id($uid) : null;
+        if (!can($uid, $uid > 0 ? authz_roles_for($viewer) : ['ROLE_USER'], VideoVoter::HIDE, $row)) {
+            respond_json(403, err('Forbidden'));
+            return;
+        }
     }
 
     $size = (int)filesize($path);
@@ -658,6 +747,7 @@ function video_json(array $row, ?int $viewerId, string $secret): array {
         'size'              => (int)$row['size'],
         'content_type'      => (string)$row['content_type'],
         'created_at'        => (string)$row['created_at'],
+        'is_hidden'         => (int)($row['is_hidden'] ?? 0),
         'is_mine'           => $viewerId !== null && (int)$row['user_id'] === $viewerId,
     ];
 }

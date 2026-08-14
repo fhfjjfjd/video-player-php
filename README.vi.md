@@ -12,9 +12,11 @@ phải cài database riêng.
 
 - Xem video công khai mà không cần đăng nhập
 - Đăng ký / đăng nhập để tải video lên và quản lý video của mình (đăng ký bắt buộc có email Gmail — email phải kết thúc bằng `@gmail.com`; đăng nhập nhận Gmail hoặc username)
+- Trang tải video riêng (`/upload`) và trang quản lý "Video của tôi" (`/my-videos`) — việc tải lên không còn nằm trong cửa sổ modal trên trang chủ; trên "Video của tôi" bạn có thể xóa, ẩn hoặc hiện các video do mình tải lên
+- Ẩn video để gỡ nó khỏi thư viện công khai: video ẩn biến mất khỏi trang chủ, tìm kiếm và JSON API với mọi người, vẫn hiển thị với chủ sở hữu (và admin) trên trang "Video của tôi", và có thể hiện lại bất cứ lúc nào. Người không phải chủ sở hữu nhận mã lỗi 404 ở trang xem, API và cả luồng media
+- Chỉ chủ sở hữu mới xóa, ẩn hoặc hiện được video — quyền được kiểm tra bằng Symfony Security (voter + access decision manager), và tài khoản có vai trò `admin` trong database (cột `users.role`) có thể thao tác trên mọi video
 - Xác thực email khi đăng ký: đăng ký sẽ gửi một mã xác thực gồm 6 chữ số tới địa chỉ Gmail, phải nhập mã này trên màn hình xác nhận trước khi tài khoản được tạo (mã có hiệu lực 10 phút, hỗ trợ gửi lại mã)
 - Các tài khoản cũ chưa từng xác thực phải xác thực email khi đăng nhập
-- Chỉ chủ sở hữu mới xóa được video của mình — quyền được kiểm tra bằng Symfony Security (voter + access decision manager), và tài khoản có vai trò `admin` trong database (cột `users.role`) có thể xóa mọi video
 - Hình ảnh thu nhỏ (thumbnail): tự động trích xuất bằng FFmpeg khi tải lên, hoặc ảnh tùy chỉnh
 - Giao diện dark kiểu streaming đáp ứng với nhận diện thương hiệu gradient emerald → teal → cyan
 - Mỗi video có URL riêng (`/video/:id`) để chia sẻ
@@ -26,7 +28,7 @@ phải cài database riêng.
 - Player đầy đủ (thẻ video gốc + hls.js cho luồng HLS `.m3u8`)
 - Nút "Góp ý" mở trang GitHub Issues của dự án; nút "Nguồn" liên kết tới kho chứa này
 - Nén phản hồi: trang HTML, API JSON và file tĩnh dạng văn bản được nén gzip (`Vary: Accept-Encoding`); luồng media luôn được phát thô để Range request và tua nhanh vẫn mượt
-- Cache thư viện video dùng chung: trang chủ và API đọc danh sách video từ cache dùng chung ngắn hạn (10 giây) thay vì truy vấn SQLite mỗi lần — tự xóa ngay khi tải lên hoặc xóa video
+- Cache thư viện video dùng chung: trang chủ và API đọc danh sách video từ cache dùng chung ngắn hạn (10 giây) thay vì truy vấn SQLite mỗi lần — tự xóa ngay khi tải lên, xóa, ẩn hoặc hiện video
 - Tinh chỉnh SQLite: WAL journal + `synchronous=NORMAL` + bảng tạm trong RAM, chỉ mục tối ưu truy vấn, và migration chạy một lần qua `PRAGMA user_version` (không quét schema mỗi kết nối)
 - Bật sẵn OPcache + JIT: các start script khởi động PHP với cache bytecode và JIT tracing để request lặp lại không phải biên dịch lại ứng dụng
 - `hls.min.js` bản vendor chỉ được tải trên các trang watch thực sự phát HLS, và được trình duyệt cache một năm
@@ -154,7 +156,7 @@ chờ xác thực.
 - `src/authz.php` — kiểm tra quyền bằng `symfony/security-core` voter (hành động riêng của chủ sở hữu + vai trò `admin`)
 - `src/accounts.php` — dịch vụ tài khoản dùng chung (đăng ký, đăng nhập, xác thực email, gửi lại mã) được dùng cho cả form render phía server và JSON API, để hai bề mặt này không bao giờ lệch nhau
 - `src/render.php` — render trang phía server
-- `src/views/` — các template trang (home, watch, đăng nhập, xác thực, lỗi)
+- `src/views/` — các template trang (home, watch, upload, my-videos, đăng nhập, xác thực, lỗi)
 - `assets/` — file tĩnh: `css/app.css`, `js/app.js`, `js/hls.min.js`, `favicon.svg`
 - `scripts/install.sh` / `scripts/install.bat` — installer một lệnh
 - `scripts/start.sh` / `scripts/start.cmd` — khởi động ứng dụng qua `php -S`
